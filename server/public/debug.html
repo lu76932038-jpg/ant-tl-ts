@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>直接解析 - 调试页面</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: #f5f7fa;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: #fff;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            margin-top: 0.5rem;
+            font-size: 1rem;
+            padding: 0.5rem;
+        }
+
+        select,
+        button {
+            margin-top: 1rem;
+            padding: 0.5rem;
+            font-size: 1rem;
+        }
+
+        button {
+            background: #0066ff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0052cc;
+        }
+
+        .result {
+            margin-top: 1.5rem;
+            white-space: pre-wrap;
+            background: #f0f0f0;
+            padding: 1rem;
+            border-radius: 4px;
+            overflow: auto;
+        }
+
+        .error {
+            color: #d00;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>直接解析（无需登录）</h2>
+        <p>在此粘贴询价文本，选择模型后点击“解析”。系统会调用后端的 /debug/parse 接口返回结构化结果。</p>
+        <label for="content">询价内容</label>
+        <textarea id="content" placeholder="在此粘贴询价单文本"></textarea>
+        <label for="model">模型</label>
+        <select id="model">
+            <option value="deepseek">DeepSeek</option>
+            <option value="gemini">Gemini</option>
+        </select>
+        <button id="parseBtn">解析</button>
+        <div id="errorMsg" class="error"></div>
+        <div id="result" class="result"></div>
+    </div>
+    <script>
+        const btn = document.getElementById('parseBtn');
+        const resultDiv = document.getElementById('result');
+        const errorDiv = document.getElementById('errorMsg');
+        btn.addEventListener('click', async () => {
+            console.log('Parse button clicked');
+            errorDiv.textContent = '';
+            resultDiv.textContent = '';
+            const content = document.getElementById('content').value.trim();
+            const model = document.getElementById('model').value;
+            if (!content) { errorDiv.textContent = '请输入询价内容'; return; }
+            try {
+                const startTime = new Date();
+                const resp = await fetch('/debug/parse', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, model })
+                });
+                const endTime = new Date();
+                const data = await resp.json();
+                if (!resp.ok) { errorDiv.textContent = data.error || '解析失败'; return; }
+                // 将时间信息加入结果展示
+                const timeInfo = {
+                    start: startTime.toISOString(),
+                    end: endTime.toISOString(),
+                    durationSeconds: ((endTime - startTime) / 1000).toFixed(3)
+                };
+                const output = { timeInfo, result: data };
+                resultDiv.textContent = JSON.stringify(output, null, 2);
+            } catch (e) {
+                console.error(e);
+                errorDiv.textContent = '网络错误，请稍后重试';
+            }
+        });
+    </script>
+</body>
+
+</html>

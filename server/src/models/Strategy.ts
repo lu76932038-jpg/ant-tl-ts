@@ -1,0 +1,183 @@
+import { Pool, RowDataPacket } from 'mysql2/promise';
+import pool from '../config/database';
+
+export interface ProductStrategy {
+    id?: number;
+    sku: string;
+    start_year_month?: string; // e.g. "2025-01"
+    forecast_cycle?: number; // Deprecated but kept for compatibility
+    forecast_year_month?: string; // e.g. "2026-12"
+    safety_stock_days: number; // e.g 0.6 months
+    service_level: number; // 0.95
+    rop: number;
+    eoq: number;
+    // New Forecast Config Fields
+    benchmark_type?: 'mom' | 'yoy';
+    mom_range?: number;
+    mom_time_sliders?: any; // JSON
+    mom_weight_sliders?: any; // JSON
+    yoy_range?: number;
+    yoy_weight_sliders?: any; // JSON
+    ratio_adjustment?: number;
+    forecast_overrides?: any; // JSON Record<string, number>
+    calculated_forecasts?: any; // JSON Record<string, number>
+    supplier_info?: any; // JSON { name, code, price, lead_time_tiers, etc }
+    updated_at?: Date;
+}
+
+export interface AuditLog {
+    id?: number;
+    sku: string;
+    action_type: string;
+    content: string; // JSON string
+    status: string; // 'AUTO_APPROVED' | 'PENDING'
+    created_at?: Date;
+}
+
+export class StrategyModel {
+    // Initialize Tables
+    static async initializeTables() {
+        try {
+            // 1. product_strategies
+            await pool.execute(`
+                CREATE TABLE IF NOT EXISTS product_strategies (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    sku VARCHAR(50) NOT NULL UNIQUE,
+                    start_year_month VARCHAR(20) DEFAULT NULL,
+                    forecast_cycle INT DEFAULT 6,
+                    forecast_year_month VARCHAR(20) DEFAULT NULL,
+                    safety_stock_days DECIMAL(10, 2) DEFAULT 0.6,
+                    service_level DECIMAL(10, 2) DEFAULT 0.95,
+                    rop INT DEFAULT 0,
+                    eoq INT DEFAULT 0,
+                    benchmark_type VARCHAR(10) DEFAULT 'mom',
+                    mom_range INT DEFAULT 6,
+                    mom_time_sliders JSON DEFAULT NULL,
+                    mom_weight_sliders JSON DEFAULT NULL,
+                    yoy_range INT DEFAULT 3,
+                    yoy_weight_sliders JSON DEFAULT NULL,
+                    ratio_adjustment DECIMAL(10, 2) DEFAULT 0,
+                    forecast_overrides JSON DEFAULT NULL,
+                    calculated_forecasts JSON DEFAULT NULL,
+                    supplier_info JSON DEFAULT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                );
+            `);
+
+            // Migration: Add columns if they don't exist (Simple approach using generic ALTER IGNORE or checking)
+            // Ideally we check information_schema, but for this tool `Add Column IF NOT EXISTS` is not standard MySQL 5.7/8.0 without procedure.
+            // We'll execute individual ALTER statements and ignore errors (code 1060: Duplicate column name).
+            const alterIgnore = async (sql: string) => {
+                try {
+                    await pool.execute(sql);
+                } catch (e: any) {
+                    if (e.code !== 'ER_DUP_FIELDNAME') {
+                        // console.log('Column already exists or other error:', e.message); 
+                    }
+                }
+            };
+
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN benchmark_type VARCHAR(10) DEFAULT 'mom'");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN mom_range INT DEFAULT 6");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN mom_time_sliders JSON DEFAULT NULL");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN mom_weight_sliders JSON DEFAULT NULL");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN yoy_range INT DEFAULT 3");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN yoy_weight_sliders JSON DEFAULT NULL");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN ratio_adjustment DECIMAL(10, 2) DEFAULT 0");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN forecast_overrides JSON DEFAULT NULL");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN calculated_forecasts JSON DEFAULT NULL");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN supplier_info JSON DEFAULT NULL");
+
+            console.log('product_strategies table initialized/updated.');
+
+            // 2. product_audit_logs
+            await pool.execute(`
+                CREATE TABLE IF NOT EXISTS product_audit_logs (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    sku VARCHAR(50) NOT NULL,
+                    action_type VARCHAR(50) NOT NULL,
+                    content TEXT,
+                    status VARCHAR(20) DEFAULT 'AUTO_APPROVED',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_sku (sku)
+                );
+            `);
+            console.log('product_audit_logs table initialized.');
+
+        } catch (error) {
+            console.error('Error initializing Strategy tables:', error);
+        }
+    }
+
+    static async findBySku(sku: string): Promise<ProductStrategy | null> {
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            'SELECT * FROM product_strategies WHERE sku = ?',
+            [sku]
+        );
+        return (rows[0] as ProductStrategy) || null;
+    }
+
+    static async upsert(strategy: ProductStrategy): Promise<void> {
+        const {
+            sku, start_year_month, forecast_cycle, forecast_year_month,
+            safety_stock_days, service_level, rop, eoq,
+            benchmark_type, mom_range, mom_time_sliders, mom_weight_sliders, yoy_range, yoy_weight_sliders, ratio_adjustment,
+            forecast_overrides, calculated_forecasts, supplier_info
+        } = strategy;
+
+        await pool.execute(
+            `INSERT INTO product_strategies (
+                sku, start_year_month, forecast_cycle, forecast_year_month,
+                safety_stock_days, service_level, rop, eoq,
+                benchmark_type, mom_range, mom_time_sliders, mom_weight_sliders, yoy_range, yoy_weight_sliders, ratio_adjustment,
+                forecast_overrides, calculated_forecasts, supplier_info
+            )
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                start_year_month = VALUES(start_year_month),
+                forecast_cycle = VALUES(forecast_cycle),
+                forecast_year_month = VALUES(forecast_year_month),
+                safety_stock_days = VALUES(safety_stock_days),
+                service_level = VALUES(service_level),
+                rop = VALUES(rop),
+                eoq = VALUES(eoq),
+                benchmark_type = VALUES(benchmark_type),
+                mom_range = VALUES(mom_range),
+                mom_time_sliders = VALUES(mom_time_sliders),
+                mom_weight_sliders = VALUES(mom_weight_sliders),
+                yoy_range = VALUES(yoy_range),
+                yoy_weight_sliders = VALUES(yoy_weight_sliders),
+                ratio_adjustment = VALUES(ratio_adjustment),
+                forecast_overrides = VALUES(forecast_overrides),
+                calculated_forecasts = VALUES(calculated_forecasts),
+                supplier_info = VALUES(supplier_info)
+            `,
+            [
+                sku, start_year_month || null, forecast_cycle || 6, forecast_year_month || null,
+                safety_stock_days ?? 0.6, service_level ?? 0.95, rop ?? 0, eoq ?? 0,
+                benchmark_type || 'mom', mom_range ?? 6,
+                mom_time_sliders ? JSON.stringify(mom_time_sliders) : null, mom_weight_sliders ? JSON.stringify(mom_weight_sliders) : null,
+                yoy_range ?? 3, yoy_weight_sliders ? JSON.stringify(yoy_weight_sliders) : null,
+                ratio_adjustment ?? 0,
+                forecast_overrides ? JSON.stringify(forecast_overrides) : null,
+                calculated_forecasts ? JSON.stringify(calculated_forecasts) : null,
+                supplier_info ? JSON.stringify(supplier_info) : null
+            ]
+        );
+    }
+
+    static async addLog(log: AuditLog): Promise<void> {
+        await pool.execute(
+            `INSERT INTO product_audit_logs (sku, action_type, content, status) VALUES (?, ?, ?, ?)`,
+            [log.sku, log.action_type, log.content, log.status]
+        );
+    }
+
+    static async getLogs(sku: string): Promise<AuditLog[]> {
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            'SELECT * FROM product_audit_logs WHERE sku = ? ORDER BY created_at DESC LIMIT 50',
+            [sku]
+        );
+        return rows as AuditLog[];
+    }
+}
