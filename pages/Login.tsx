@@ -78,7 +78,7 @@ const Login: React.FC = () => {
                     return;
                 }
                 await login(username, password);
-                window.location.href = '/';
+                window.location.href = import.meta.env.BASE_URL;
             } else {
                 // Email login logic
                 const apiBaseUrl = config.apiBaseUrl;
@@ -96,7 +96,7 @@ const Login: React.FC = () => {
                 const data = await response.json();
                 localStorage.setItem('token', data.token);
                 // Force reload to update auth context state
-                window.location.href = '/';
+                window.location.href = import.meta.env.BASE_URL;
             }
             // If successful, login() or direct redirect handles navigation
             // navigate('/'); // Handled by refresh for now to sync state simply

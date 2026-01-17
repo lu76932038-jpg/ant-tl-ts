@@ -102,7 +102,7 @@ const Register: React.FC = () => {
 
             localStorage.setItem('token', data.token);
             // Reload page to correct state or use internal method if we refactor AuthContext
-            window.location.href = '/';
+            window.location.href = import.meta.env.BASE_URL;
 
         } catch (err: any) {
             setError(err.message);
