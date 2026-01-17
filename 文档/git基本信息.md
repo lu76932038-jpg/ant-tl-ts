@@ -5,6 +5,14 @@
 ## 初始化Git
 
 git init
+git add .
+git commit -m "first commit"
+git remote add origin <https://github.com/lu76932038-jpg/ant-tl-ts.git>
+git branch -M main
+git push -u origin main
+
+添加所有文件到暂存区
+git add .
 
 1. 合并分支到主分支 (main)
 在归档前，必须将测试成功的代码合并到主干中。请在终端执行：
