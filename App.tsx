@@ -22,7 +22,7 @@ import ProductDetail from './pages/stock/ProductDetail';
 const App: React.FC = () => {
     return (
         <AuthProvider>
-            <BrowserRouter basename="/ant-tool">
+            <BrowserRouter basename={import.meta.env.BASE_URL}>
                 <Routes>
                     {/* Public Routes */}
                     <Route path="/login" element={<Login />} />

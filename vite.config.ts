@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
-    base: '/ant-tool/',
+    base: env.VITE_BASE_PATH,
     server: {
       port: parseInt(env.VITE_PORT),
       host: '0.0.0.0',
