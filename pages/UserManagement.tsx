@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Users, Trash2, Shield } from 'lucide-react';
+import { config } from '../config';
 
 interface User {
     id: number;
@@ -48,7 +49,7 @@ const UserManagement: React.FC = () => {
 
     const fetchUsers = async () => {
         try {
-            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+            const apiBaseUrl = config.apiBaseUrl;
             const response = await fetch(`${apiBaseUrl}/api/users`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -72,7 +73,7 @@ const UserManagement: React.FC = () => {
         if (!confirm('确定要删除这个用户吗?')) return;
 
         try {
-            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+            const apiBaseUrl = config.apiBaseUrl;
             const response = await fetch(`${apiBaseUrl}/api/users/${userId}`, {
                 method: 'DELETE',
                 headers: {
@@ -119,7 +120,7 @@ const UserManagement: React.FC = () => {
         if (!editingUser) return;
 
         try {
-            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+            const apiBaseUrl = config.apiBaseUrl;
             const response = await fetch(`${apiBaseUrl}/api/users/${editingUser.id}`, {
                 method: 'PUT',
                 headers: {

@@ -11,6 +11,7 @@ import {
     ChevronDown,
     ChevronUp
 } from 'lucide-react';
+import { config } from '../config';
 
 interface AuditLog {
     id: number;
@@ -33,7 +34,7 @@ const AuditLogs: React.FC = () => {
 
     const fetchLogs = async () => {
         try {
-            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+            const apiBaseUrl = config.apiBaseUrl;
             const response = await fetch(`${apiBaseUrl}/api/audit`, {
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('token')}`

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingCart, CheckCircle, AlertTriangle, Plus } from 'lucide-react';
+import { config } from '../../config';
 
 interface Suggestion {
     sku: string;
@@ -36,7 +37,7 @@ const PurchaseOrderList: React.FC = () => {
     const fetchSuggestions = async () => {
         setIsLoading(true);
         try {
-            const res = await fetch('/api/purchase-orders/suggestions');
+            const res = await fetch(`${config.apiBaseUrl}/api/purchase-orders/suggestions`);
             setSuggestions(await res.json());
         } finally {
             setIsLoading(false);
@@ -46,7 +47,7 @@ const PurchaseOrderList: React.FC = () => {
     const fetchOrders = async () => {
         setIsLoading(true);
         try {
-            const res = await fetch('/api/purchase-orders');
+            const res = await fetch(`${config.apiBaseUrl}/api/purchase-orders`);
             setOrders(await res.json());
         } finally {
             setIsLoading(false);
@@ -56,7 +57,7 @@ const PurchaseOrderList: React.FC = () => {
     const handleCreatePO = async (suggestion: Suggestion) => {
         if (!confirm(`确认要为 ${suggestion.sku} 创建采购单吗?`)) return;
         try {
-            const res = await fetch('/api/purchase-orders', {
+            const res = await fetch(`${config.apiBaseUrl}/api/purchase-orders`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -79,7 +80,7 @@ const PurchaseOrderList: React.FC = () => {
     const handleConfirmPO = async (id: number) => {
         if (!confirm('确认采购? 将自动生成入库单。')) return;
         try {
-            const res = await fetch(`/api/purchase-orders/${id}/confirm`, { method: 'POST' });
+            const res = await fetch(`${config.apiBaseUrl}/api/purchase-orders/${id}/confirm`, { method: 'POST' });
             if (res.ok) {
                 alert('已确认采购，请前往入库清单查看');
                 fetchOrders();

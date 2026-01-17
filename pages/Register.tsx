@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Captcha from '../components/Captcha';
+import { config } from '../config';
 
 const Register: React.FC = () => {
     const [username, setUsername] = useState('');
@@ -32,7 +33,7 @@ const Register: React.FC = () => {
         }
 
         try {
-            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+            const apiBaseUrl = config.apiBaseUrl;
             const response = await fetch(`${apiBaseUrl}/api/auth/send-code`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -77,7 +78,7 @@ const Register: React.FC = () => {
         setIsLoading(true);
 
         try {
-            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+            const apiBaseUrl = config.apiBaseUrl;
             const response = await fetch(`${apiBaseUrl}/api/auth/register-email`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

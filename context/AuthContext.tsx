@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
+import { config } from '../config';
 
 interface User {
     id: number;
@@ -37,7 +38,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const fetchCurrentUser = async (authToken: string) => {
         try {
-            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+            const apiBaseUrl = config.apiBaseUrl;
             const response = await fetch(`${apiBaseUrl}/api/auth/me`, {
                 headers: {
                     'Authorization': `Bearer ${authToken}`
@@ -61,7 +62,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const login = async (username: string, password: string) => {
         // Force use correct IP
-        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+        const apiBaseUrl = config.apiBaseUrl;
         const response = await fetch(`${apiBaseUrl}/api/auth/login`, {
             method: 'POST',
             headers: {
@@ -82,7 +83,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const register = async (username: string, email: string, password: string) => {
-        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+        const apiBaseUrl = config.apiBaseUrl;
         const response = await fetch(`${apiBaseUrl}/api/auth/register`, {
             method: 'POST',
             headers: {

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import { config } from '../../config';
 
 
 
@@ -114,7 +115,7 @@ const ProductDetail: React.FC = () => {
 
     const fetchProductDetail = async () => {
         try {
-            const response = await fetch(`/api/products/${sku}/detail`);
+            const response = await fetch(`${config.apiBaseUrl}/api/products/${sku}/detail`);
             if (!response.ok) throw new Error('Product not found');
             const result = await response.json();
             setData(result);
@@ -127,7 +128,7 @@ const ProductDetail: React.FC = () => {
 
     const fetchStrategy = async () => {
         try {
-            const response = await fetch(`/api/products/${sku}/strategy`);
+            const response = await fetch(`${config.apiBaseUrl}/api/products/${sku}/strategy`);
             const result = await response.json();
             setStrategy(result.strategy);
             setSupplier(result.supplier);
@@ -158,7 +159,7 @@ const ProductDetail: React.FC = () => {
 
     const fetchLogs = async () => {
         try {
-            const response = await fetch(`/api/products/${sku}/logs`);
+            const response = await fetch(`${config.apiBaseUrl}/api/products/${sku}/logs`);
             const result = await response.json();
             setLogs(result);
         } catch (error) {
@@ -171,7 +172,7 @@ const ProductDetail: React.FC = () => {
         setIsSaving(true);
         try {
             const supplierToSave = supplierOverride || editSupplierInfo;
-            const response = await fetch(`/api/products/${sku}/strategy`, {
+            const response = await fetch(`${config.apiBaseUrl}/api/products/${sku}/strategy`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -525,7 +526,7 @@ const ProductDetail: React.FC = () => {
         // Save Configuration and Results to Backend
         // We use newCalculated directly to ensure we save the latest data
         setIsSaving(true);
-        fetch(`/api/products/${sku}/strategy`, {
+        fetch(`${config.apiBaseUrl}/api/products/${sku}/strategy`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -563,7 +564,7 @@ const ProductDetail: React.FC = () => {
             const qty = strategy.eoq || 0;
             const supplierName = editSupplierInfo?.name || '未知供应商';
 
-            const response = await fetch('/api/purchase-orders', {
+            const response = await fetch(`${config.apiBaseUrl}/api/purchase-orders`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { KeyRound, ShieldCheck, AlertCircle, CheckCircle2, Lock } from 'lucide-react';
+import { config } from '../config';
 
 const ChangePassword: React.FC = () => {
     const [oldPassword, setOldPassword] = useState('');
@@ -19,7 +20,7 @@ const ChangePassword: React.FC = () => {
         setStatus({ type: null, message: '' });
 
         try {
-            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+            const apiBaseUrl = config.apiBaseUrl;
             const response = await fetch(`${apiBaseUrl}/api/users/change-password`, {
                 method: 'POST',
                 headers: {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Save } from 'lucide-react';
+import { config } from '../../config';
 
 interface AddEntryModalProps {
     onClose: () => void;
@@ -21,7 +22,7 @@ export const AddEntryModal: React.FC<AddEntryModalProps> = ({ onClose, onSuccess
         e.preventDefault();
         setIsSubmitting(true);
         try {
-            const response = await fetch('/api/entrylist', {
+            const response = await fetch(`${config.apiBaseUrl}/api/entrylist`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)

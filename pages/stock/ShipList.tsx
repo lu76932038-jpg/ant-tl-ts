@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Download, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
+import { config } from '../../config';
 
 interface ShipRecord {
     id: number;
@@ -27,7 +28,7 @@ const ShipList: React.FC = () => {
 
     const fetchShipList = async () => {
         try {
-            const response = await fetch('/api/shiplist');
+            const response = await fetch(`${config.apiBaseUrl}/api/shiplist`);
             const data = await response.json();
             setRecords(data);
         } catch (error) {

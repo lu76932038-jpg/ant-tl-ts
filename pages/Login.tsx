@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { KeyRound, MessageSquareCode } from 'lucide-react';
 import Captcha from '../components/Captcha';
+import { config } from '../config';
 
 const Login: React.FC = () => {
     const [loginMethod, setLoginMethod] = useState<'password' | 'email'>('password');
@@ -34,7 +35,7 @@ const Login: React.FC = () => {
         }
 
         try {
-            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+            const apiBaseUrl = config.apiBaseUrl;
             const response = await fetch(`${apiBaseUrl}/api/auth/send-code`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -80,7 +81,7 @@ const Login: React.FC = () => {
                 window.location.href = '/';
             } else {
                 // Email login logic
-                const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+                const apiBaseUrl = config.apiBaseUrl;
                 const response = await fetch(`${apiBaseUrl}/api/auth/login-email`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },

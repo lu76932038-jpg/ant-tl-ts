@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Captcha from '../components/Captcha';
+import { config } from '../config';
 
 const ForgotPassword: React.FC = () => {
     const [email, setEmail] = useState('');
@@ -24,7 +25,7 @@ const ForgotPassword: React.FC = () => {
         }
 
         try {
-            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+            const apiBaseUrl = config.apiBaseUrl;
             const response = await fetch(`${apiBaseUrl}/api/auth/send-code`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -60,7 +61,7 @@ const ForgotPassword: React.FC = () => {
         setIsLoading(true);
 
         try {
-            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+            const apiBaseUrl = config.apiBaseUrl;
             const response = await fetch(`${apiBaseUrl}/api/auth/reset-password`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

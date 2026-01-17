@@ -7,6 +7,7 @@ import { Download, Plus, Eye, ChevronLeft, ChevronRight, ChevronDown, Clock, Pac
 import AddProductModal from '../../components/AddProductModal';
 import DownloadOptionsModal from '../../components/DownloadOptionsModal';
 import ShipProductModal from '../../components/ShipProductModal';
+import { config } from '../../config';
 
 const StockList: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
@@ -22,17 +23,17 @@ const StockList: React.FC = () => {
 
     const fetchStocks = async () => {
         try {
-            const response = await fetch('/api/stocks');
+            const response = await fetch(`${config.apiBaseUrl}/api/stocks`);
             let data = await response.json();
 
             // 如果数据库没数据，则尝试初始化 (基于 MOCK 数据)
             if (data.length === 0) {
-                await fetch('/api/stocks/initialize', {
+                await fetch(`${config.apiBaseUrl}/api/stocks/initialize`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ mockData: MOCK_PRODUCTS })
                 });
-                const retryResponse = await fetch('/api/stocks');
+                const retryResponse = await fetch(`${config.apiBaseUrl}/api/stocks`);
                 data = await retryResponse.json();
             }
 
@@ -46,7 +47,7 @@ const StockList: React.FC = () => {
 
     const handleAddProduct = async (newProduct: Omit<Product, 'id'>) => {
         try {
-            const response = await fetch('/api/stocks', {
+            const response = await fetch(`${config.apiBaseUrl}/api/stocks`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newProduct)
@@ -72,7 +73,7 @@ const StockList: React.FC = () => {
 
     const handleShipProduct = async (shipData: { product_model: string; product_name: string; outbound_date: string; quantity: number; customer_name: string; unit_price: number }) => {
         try {
-            const response = await fetch('/api/shiplist', {
+            const response = await fetch(`${config.apiBaseUrl}/api/shiplist`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(shipData)
