@@ -1,6 +1,6 @@
 module.exports = {
     apps: [{
-        name: "ant-server",
+        name: "anttools-backend",
         script: "./dist/server.js"
     }]
 }
