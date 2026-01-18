@@ -44,7 +44,8 @@ const SidebarLayout: React.FC = () => {
 
     const handleLogout = () => {
         logout();
-        navigate('/login');
+        // Force full reload to verify session clear
+        window.location.href = `${import.meta.env.BASE_URL}login`;
     };
 
     interface MenuItem {
@@ -298,9 +299,12 @@ const SidebarLayout: React.FC = () => {
                             {/* 操作按钮组 */}
                             <div className={`flex items-center transition-all duration-300 ${isSidebarCollapsed ? 'flex-col order-1 gap-2 mb-1' : 'gap-1'}`}>
                                 {/* 注销按钮 */}
+                                {/* 注销按钮 */}
                                 <button
                                     onClick={handleLogout}
+                                    type="button"
                                     className={`
+                                        relative z-50 cursor-pointer
                                         flex items-center justify-center rounded-lg transition-all
                                         hover:bg-red-500/20 hover:text-red-400
                                         ${isSidebarCollapsed

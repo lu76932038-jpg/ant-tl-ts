@@ -87,7 +87,7 @@ const ForgotPassword: React.FC = () => {
             <div
                 className="absolute inset-0 bg-cover bg-center md:bg-[length:100%_auto] bg-no-repeat"
                 style={{
-                    backgroundImage: 'url("/assets/login-bg.png")',
+                    backgroundImage: `url("${import.meta.env.BASE_URL}assets/login-bg.png")`,
                     backgroundPosition: 'left center'
                 }}
             />

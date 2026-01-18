@@ -24,6 +24,10 @@ const Login: React.FC = () => {
     const { login } = useAuth();
     const navigate = useNavigate();
 
+    // Debugging environment variables
+    console.log('Vite Env:', import.meta.env);
+    console.log('App Version:', import.meta.env.VITE_APP_VERSION);
+
     const handleSendCode = async () => {
         if (!email) {
             setError('请输入邮箱');
@@ -112,7 +116,7 @@ const Login: React.FC = () => {
             <div
                 className="absolute inset-0 bg-cover bg-center md:bg-[length:100%_auto] bg-no-repeat"
                 style={{
-                    backgroundImage: 'url("/assets/login-bg.png")',
+                    backgroundImage: `url("${import.meta.env.BASE_URL}assets/login-bg.png")`,
                     backgroundPosition: 'left center'
                 }}
             />
@@ -122,7 +126,7 @@ const Login: React.FC = () => {
                 <div className="bg-white/40 backdrop-blur-xl border border-white/40 rounded-[2.5rem] shadow-2xl p-8 space-y-6">
                     <div className="text-center space-y-2">
                         <h1 className="text-4xl font-light text-slate-800 tracking-[0.2em] mb-4">
-                            殸木
+                            殸木 <span className="text-sm font-normal opacity-70">V{import.meta.env.VITE_APP_VERSION}</span>
                         </h1>
                         <div className="h-px w-12 bg-slate-300 mx-auto" />
                     </div>
