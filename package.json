@@ -1,5 +1,5 @@
 {
-  "name": "询价小工具",
+  "name": "ant-tool",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -13,6 +13,7 @@
     "@types/file-saver": "^2.0.7",
     "arima": "^0.2.5",
     "file-saver": "^2.0.5",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.562.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",

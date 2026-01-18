@@ -4,8 +4,10 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
+  // 优先读取 VITE_BASE_PATH，如果没有，生产环境默认 /ant-tool/，开发环境默认 /
+  const basePath = env.VITE_BASE_PATH || (mode === 'production' ? '/ant-tool/' : '/');
   return {
-    base: env.VITE_BASE_PATH,
+    base: basePath,
     server: {
       port: parseInt(env.VITE_PORT),
       host: '0.0.0.0',
