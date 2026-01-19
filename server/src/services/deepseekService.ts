@@ -120,20 +120,18 @@ export const extractDataFromContent = async (
         console.warn(`[DeepSeek] 内容可能超过 token 限制 (${estimatedTokens} > ${DEEPSEEK_MAX_TOKENS})，建议拆分后重试`);
     }
 
-    // 打印请求 payload（messages）
+    // 构造请求消息
     const messages = [
         { role: "system", content: systemInstruction },
-        { role: "user", content: `Extract data from: ${contentStrForTokens}` }
+        { role: "user", content: `请将以下询价内容转换为 JSON 数组格式返回：\n\n${contentStrForTokens}` }
     ];
-    console.log('[DeepSeek] 开始请求:', new Date().toISOString());
-    // console.log('[DeepSeek] Request messages:', JSON.stringify(messages, null, 2));
 
     try {
         const completion = await openai.chat.completions.create({
             messages: messages as any,
             model: "deepseek-chat",
             temperature: 0.1,
-            response_format: { type: 'json_object' } // DeepSeek supports JSON mode
+            response_format: { type: 'json_object' }
         });
 
         const resultText = completion.choices[0].message.content || "[]";

@@ -19,6 +19,8 @@ import { StrategyModel } from './models/Strategy';
 import strategyRoutes from './routes/strategyRoutes';
 import { EntryListModel } from './models/EntryList';
 import entryListRoutes from './routes/entryListRoutes';
+import inquiryRoutes from './routes/inquiryRoutes';
+import { InquiryTaskModel } from './models/InquiryTask';
 
 const app = express();
 
@@ -42,6 +44,7 @@ app.use('/api/stocks', stockRoutes);
 app.use('/api/shiplist', shipListRoutes);
 app.use('/api/products', productRoutes); // Register Product routes
 app.use('/api/products', strategyRoutes); // Register Strategy routes
+app.use('/api/inquiry', inquiryRoutes); // Register Inquiry routes
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
@@ -54,6 +57,7 @@ const initDB = async () => {
 
         await StrategyModel.initializeTables(); // Initialize Strategy tables
         await ShipListModel.initializeTable(); // Initialize ShipList table
+        await InquiryTaskModel.initializeTable(); // Initialize InquiryTask table
 
         console.log('Database initialized.');
     } catch (error) {

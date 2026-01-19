@@ -1,12 +1,16 @@
 import app from './app';
 import { config } from './config/env';
-import dotenv from 'dotenv';
-import path from 'path';
 import { UserModel } from './models/User';
 import { AuditLogModel } from './models/AuditLog';
 import { StockModel } from './models/Stock';
+import { createServer } from 'http';
+import { initSocket } from './socket';
 
 const PORT = config.server.port;
+const httpServer = createServer(app);
+
+// 初始化 Socket.io
+initSocket(httpServer);
 
 // 初始化数据库
 async function initializeDatabase() {
@@ -23,6 +27,10 @@ async function initializeDatabase() {
         await EntryListModel.initializeTable();
         await StrategyModel.initializeTables();
 
+        // Initialize Inquiry Task Table
+        const { InquiryTaskModel } = require('./models/InquiryTask');
+        await InquiryTaskModel.initializeTable();
+
         console.log('数据库初始化成功');
     } catch (error) {
         console.error('数据库初始化失败:', error);
@@ -34,17 +42,14 @@ async function initializeDatabase() {
 async function startServer() {
     await initializeDatabase();
 
-    app.listen(PORT as number, '0.0.0.0', () => {
-        console.log(`Server is running on port ${PORT}`);
+    httpServer.listen(PORT as number, '0.0.0.0', () => {
+        console.log(`Server is running with WebSocket support on port ${PORT}`);
         console.log(`Environment: ${config.server.env}`);
         if (!process.env.GEMINI_API_KEY) {
             console.warn("WARNING: GEMINI_API_KEY is not set!");
         }
         if (!process.env.JWT_SECRET) {
             console.warn("WARNING: JWT_SECRET is not set!");
-        }
-        if (!process.env.DEEPSEEK_API_KEY) {
-            console.warn("WARNING: DEEPSEEK_API_KEY is not set!");
         }
     });
 }

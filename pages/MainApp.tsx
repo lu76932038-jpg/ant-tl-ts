@@ -4,6 +4,7 @@ import { Upload, FileText, Download, FileSpreadsheet, Loader2, X, Plus, ChevronD
 import { getFileType, readExcelContent, readWordContent, fileToBase64, createExcelDownload, recognizeText } from '../services/fileUtils';
 import { extractDataFromContent } from '../services/inquiryService';
 import { ParsedInquiryItem, LogEntry, AIModel } from '../types';
+import { api } from '../services/api';
 
 interface ColumnHeader {
   key: string;
@@ -200,58 +201,31 @@ const App: React.FC = () => {
 
   const handleProcessFile = async (file: File) => {
     setIsProcessing(true);
-    addLog(`正在处理: ${file.name}`, 'info');
+    addLog(`正在上传: ${file.name}`, 'info');
 
     try {
-      // 1. 基础校验
-      addLog(`校验文件大小: ${(file.size / 1024 / 1024).toFixed(2)}MB`, 'info');
-      if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-        throw new Error(`文件过大 (${(file.size / 1024 / 1024).toFixed(2)}MB). 最大允许 ${MAX_SIZE_MB}MB`);
-      }
-      addLog(`文件大小校验通过`, 'info');
+      const formData = new FormData();
+      formData.append('file', file);
 
-      const fileType = getFileType(file);
-      const fileExt = file.name.split('.').pop()?.toLowerCase() || '';
+      // Call backend upload API
+      const response = await api.post('/inquiry/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
 
-      addLog(`校验文件类型: ${fileExt}`, 'info');
-      if (!ALLOWED_TYPES.includes(fileExt) && fileType === 'unknown') {
-        throw new Error(`不支持的文件类型 .${fileExt}`);
-      }
-      addLog(`文件类型校验通过`, 'info');
+      addLog(`上传解析成功! 任务ID: ${response.taskId}`, 'success');
 
-
-      let contentToProcess: string | { mimeType: string; data: string };
-
-      if (fileType === 'excel') {
-        contentToProcess = await readExcelContent(file);
-        addLog(`Excel 读取完成，正在脱敏并识别数据...`, 'info');
-      } else if (fileType === 'word') {
-        contentToProcess = await readWordContent(file);
-        addLog(`Word 读取完成，正在脱敏并识别数据...`, 'info');
-      } else if (fileType === 'pdf' || fileType === 'image') {
-        const base64Data = await fileToBase64(file);
-        contentToProcess = { mimeType: file.type, data: base64Data };
-        addLog(`${fileType.toUpperCase()} 读取/转码完成`, 'info');
-      } else {
-        throw new Error("不支持的文件类型");
+      // Navigate to history or show success
+      // Ideally we redirect, but for batch upload we might wait or offer a link
+      if (response.result && response.result.items) {
+        setParsedData(prev => [...prev, ...response.result.items]);
       }
 
-      // Direct inquiry call (AI parsing only)
-      const result = await extractDataFromContent(contentToProcess, file.name);
-      // addLog(`contentToProcess读取成功2...`, 'info');
-      const extractedItems = result.items || [];
-      // addLog(`contentToProcess读取成功3...`, 'info');
-
-      setParsedData(prev => [...prev, ...extractedItems]);
-      addLog(`成功! 从 ${file.name} 提取了 ${extractedItems.length} 条数据`, 'success', result.debug);
-
-      if (extractedItems.length > 0) {
-        setTimeout(() => setIsUploadDrawerOpen(false), 500);
-      }
+      // Auto close after success?
+      addLog(`解析完成，结果已保存至历史任务`, 'success');
 
     } catch (error: any) {
       console.error(error);
-      addLog(`出错 (${file.name}): ${error.message}`, 'error');
+      addLog(`出错 (${file.name}): ${error.message || '上传失败'}`, 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -375,6 +349,14 @@ const App: React.FC = () => {
             >
               <Download className="w-4 h-4" />
               导出 Excel 报表
+            </button>
+
+            <button
+              onClick={() => window.location.href = '/ant-tool/inquiry-history'}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-2xl font-bold transition-all shadow-lg active:scale-95 bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
+            >
+              <FileText className="w-4 h-4" />
+              历史任务
             </button>
           </div>
         </div>

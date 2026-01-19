@@ -18,6 +18,7 @@ import ShipList from './pages/stock/ShipList';
 import EntryList from './pages/stock/EntryList';
 import PurchaseOrderList from './pages/stock/PurchaseOrderList';
 import ProductDetail from './pages/stock/ProductDetail';
+import InquiryHistory from './pages/InquiryHistory';
 
 const App: React.FC = () => {
     return (
@@ -29,7 +30,6 @@ const App: React.FC = () => {
                     <Route path="/register" element={<Register />} />
                     <Route path="/train-ticket-zip" element={<TrainTicketZip />} />
                     <Route path="/forgot-password" element={<ForgotPassword />} />
-                    <Route path="/forgot-password" element={<ForgotPassword />} />
 
                     {/* Protected Routes */}
                     <Route
@@ -40,7 +40,8 @@ const App: React.FC = () => {
                             </ProtectedRoute>
                         }
                     >
-                        <Route index element={<MainApp />} />
+                        <Route index element={<InquiryHistory />} />
+                        <Route path="inquiry-history" element={<InquiryHistory />} />
                         <Route path="profile" element={<ProfileInfo />} />
                         <Route path="change-password" element={<ChangePassword />} />
                         <Route path="at-orders" element={<AtOrders />} />

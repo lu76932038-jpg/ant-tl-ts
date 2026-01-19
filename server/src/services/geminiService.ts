@@ -131,11 +131,23 @@ export const extractDataFromContent = async (
         const data: any = await response.json();
 
         // Parse candidates
-        const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!responseText) return [];
+        const candidate = data.candidates?.[0];
 
-        const rawData = JSON.parse(responseText) as AIResponseItem[];
-        return normalizeInquiryData(rawData);
+        if (candidate?.finishReason === 'SAFETY') {
+            throw new Error('AI 解析被安全策略拦截。');
+        }
+
+        const responseText = candidate?.content?.parts?.[0]?.text;
+        if (!responseText) {
+            throw new Error(`AI 未返回数据 (原因: ${candidate?.finishReason || '未知'})`);
+        }
+
+        try {
+            const rawData = JSON.parse(responseText) as AIResponseItem[];
+            return normalizeInquiryData(rawData);
+        } catch (parseError) {
+            throw new Error("AI 返回数据格式异常。");
+        }
 
     } catch (error) {
         console.error("Gemini Extraction Error:", error);

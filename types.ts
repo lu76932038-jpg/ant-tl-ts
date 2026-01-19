@@ -90,3 +90,23 @@ export interface FilterStats {
   healthy: number;
   stagnant: number;
 }
+
+export interface InquiryTask {
+  id: string;
+  user_id: number;
+  file_name: string;
+  file_path: string;
+  file_size: number;
+  status: 'pending' | 'completed' | 'failed' | 'terminated';
+  parsed_result: any;
+  raw_content?: any;
+  process_logs?: any;
+  shared_with: number[];
+  error_message?: string;
+  completed_at?: string;
+  rating?: number;
+  comment?: string;
+  user_name?: string;
+  created_at: string;
+  updated_at: string;
+}

@@ -6,7 +6,7 @@ import {
     Users,
     LogOut,
     User,
-    LayoutDashboard,
+    LayoutGrid,
     Menu,
     X,
     ChevronRight,
@@ -62,7 +62,7 @@ const SidebarLayout: React.FC = () => {
             label: '殸木小工具',
             icon: <Wrench className="w-5 h-5 text-gray-600" />,
             children: [
-                { label: '询价解析', path: '/', icon: <LayoutDashboard className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'inquiry_parsing' },
+                { label: '询价任务中心', path: '/', icon: <LayoutGrid className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'inquiry_parsing' },
                 { label: 'A&T 订单', path: '/at-orders', icon: <FileSpreadsheet className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'at_orders' },
                 {
                     label: '备货小助手',
