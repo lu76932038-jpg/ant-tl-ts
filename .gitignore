@@ -39,3 +39,7 @@ mysql-data/
 
 # 本地文档
 doc/local/*
+
+# 上传文件
+server/uploads/
+server/tmp/
