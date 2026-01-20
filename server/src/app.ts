@@ -40,6 +40,8 @@ app.use(express.static(path.join(__dirname, '../public'))); // Serve static UI p
 const standardLimiter = rateLimiter(60 * 1000, 100);
 // 严格限流（针对 AI/文件处理）：每分钟 20 次请求
 const strictLimiter = rateLimiter(60 * 1000, 20);
+// 询价上传限流：每分钟 50 次请求（适应批量上传场景）
+const inquiryLimiter = rateLimiter(60 * 1000, 50);
 
 // 公开接口 (无需认证)
 app.get('/health', (req, res) => {
@@ -63,7 +65,7 @@ app.use('/api/shiplist', authenticate, standardLimiter, requirePermission('stock
 app.use('/api/products', authenticate, standardLimiter, requirePermission('stock_list'), productRoutes);
 app.use('/api/purchase-orders', authenticate, standardLimiter, requirePermission('stock_list'), purchaseOrderRoutes);
 app.use('/api/strategies', authenticate, standardLimiter, requirePermission('stock_list'), strategyRoutes);
-app.use('/api/inquiry', authenticate, strictLimiter, requirePermission('inquiry_parsing'), inquiryRoutes);
+app.use('/api/inquiry', authenticate, inquiryLimiter, requirePermission('inquiry_parsing'), inquiryRoutes);
 
 // Database Initialization (assuming initAdminUser and StockModel.initializeTable exist elsewhere or will be added)
 const initDB = async () => {

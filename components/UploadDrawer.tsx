@@ -134,10 +134,19 @@ const UploadDrawer: React.FC<UploadDrawerProps> = ({ isOpen, onClose, onUploadCo
         const uploadedTasks = [];
         let hasError = false;
 
-        for (const file of pendingFiles) {
+        // 辅助函数：延迟
+        const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+        for (let i = 0; i < pendingFiles.length; i++) {
+            const file = pendingFiles[i];
             try {
                 const task = await handleProcessFile(file);
                 if (task) uploadedTasks.push(task);
+
+                // 关键加固：每次上传后等待1秒，防止瞬间触发后端限流
+                if (i < pendingFiles.length - 1) {
+                    await delay(1000);
+                }
             } catch (error: any) {
                 hasError = true;
                 // 核心点：如果遇到 429 限流，立即熔断，不再尝试后续文件
