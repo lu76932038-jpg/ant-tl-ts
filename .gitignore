@@ -33,12 +33,14 @@ dist-ssr
 # 排除编译产物
 backend/dist/
 dist/
+文档/
 
 # 数据库临时文件（如果有）
 mysql-data/
 
 # 本地文档
 doc/local/*
+docs/
 
 # 上传文件
 server/uploads/

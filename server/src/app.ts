@@ -19,8 +19,13 @@ import { StrategyModel } from './models/Strategy';
 import strategyRoutes from './routes/strategyRoutes';
 import { EntryListModel } from './models/EntryList';
 import entryListRoutes from './routes/entryListRoutes';
+import purchaseOrderRoutes from './routes/purchaseOrderRoutes';
 import inquiryRoutes from './routes/inquiryRoutes';
 import { InquiryTaskModel } from './models/InquiryTask';
+import { UserModel } from './models/User';
+import { LoginLogModel } from './models/LoginLog';
+import { authenticate, requireAdmin, requirePermission } from './middleware/auth';
+import { rateLimiter } from './middleware/rateLimiter';
 
 const app = express();
 
@@ -31,30 +36,42 @@ app.use(cors({
 app.use(express.json({ limit: `${config.upload.maxSizeMB}mb` })); // Support large images or file content
 app.use(express.static(path.join(__dirname, '../public'))); // Serve static UI pages
 
-app.use('/api', apiRoutes);
-app.use('/admin', adminRoutes);
-app.use('/debug', debugRoutes);
-app.use('/debug-page', debugPageRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/audit', auditRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/train-ticket', trainTicketRoutes);
-app.use('/api/stocks', stockRoutes);
-app.use('/api/shiplist', shipListRoutes);
-app.use('/api/products', productRoutes); // Register Product routes
-app.use('/api/products', strategyRoutes); // Register Strategy routes
-app.use('/api/inquiry', inquiryRoutes); // Register Inquiry routes
+// 基础限流：每分钟 100 次请求
+const standardLimiter = rateLimiter(60 * 1000, 100);
+// 严格限流（针对 AI/文件处理）：每分钟 20 次请求
+const strictLimiter = rateLimiter(60 * 1000, 20);
 
+// 公开接口 (无需认证)
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
 });
+app.use('/api/auth', standardLimiter, authRoutes); // 登录注册使用基础限流
+
+// 调试接口 (如有需要)
+app.use('/debug', debugRoutes);
+app.use('/debug-page', debugPageRoutes);
+
+// 需要认证的接口
+app.use('/api', authenticate, standardLimiter, apiRoutes);
+app.use('/admin', authenticate, requireAdmin, adminRoutes);
+app.use('/api/users', authenticate, standardLimiter, userRoutes);
+app.use('/api/audit', authenticate, standardLimiter, requirePermission('admin'), auditRoutes);
+app.use('/api/orders', authenticate, strictLimiter, requirePermission('at_orders'), orderRoutes);
+app.use('/api/train-ticket', authenticate, strictLimiter, requirePermission('train_invoice'), trainTicketRoutes);
+app.use('/api/stocks', authenticate, standardLimiter, requirePermission('stock_list'), stockRoutes);
+app.use('/api/shiplist', authenticate, standardLimiter, requirePermission('stock_list'), shipListRoutes);
+app.use('/api/products', authenticate, standardLimiter, requirePermission('stock_list'), productRoutes);
+app.use('/api/purchase-orders', authenticate, standardLimiter, requirePermission('stock_list'), purchaseOrderRoutes);
+app.use('/api/strategies', authenticate, standardLimiter, requirePermission('stock_list'), strategyRoutes);
+app.use('/api/inquiry', authenticate, strictLimiter, requirePermission('inquiry_parsing'), inquiryRoutes);
 
 // Database Initialization (assuming initAdminUser and StockModel.initializeTable exist elsewhere or will be added)
 const initDB = async () => {
     try {
         console.log('Database initialization checks...');
 
+        await UserModel.initializeTable();
+        await LoginLogModel.initializeTable();
         await StrategyModel.initializeTables(); // Initialize Strategy tables
         await ShipListModel.initializeTable(); // Initialize ShipList table
         await InquiryTaskModel.initializeTable(); // Initialize InquiryTask table

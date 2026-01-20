@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { UserModel } from '../models/User';
+import { LoginLogModel } from '../models/LoginLog';
 import { config } from '../config/env';
 
 // 生成 JWT Token 辅助函数
@@ -18,10 +19,7 @@ const generateToken = (userId: number) => {
 // 发送验证码
 import { sendVerificationEmail, verifyEmailCode } from '../services/emailService';
 
-// ... imports ...
-
 export const sendVerificationCode = async (req: Request, res: Response) => {
-    console.log('DEBUG: Received send-code request:', req.body);
     try {
         const { email } = req.body;
         if (!email) {
@@ -40,6 +38,9 @@ export const sendVerificationCode = async (req: Request, res: Response) => {
 
 // 邮箱验证码登录
 export const loginEmail = async (req: Request, res: Response) => {
+    const ipAddress = (req.headers['x-forwarded-for'] as string) || req.ip || '';
+    const userAgent = req.headers['user-agent'] || '';
+
     try {
         const { email, code } = req.body;
 
@@ -49,23 +50,55 @@ export const loginEmail = async (req: Request, res: Response) => {
         }
 
         if (!verifyEmailCode(email, code)) {
+            await LoginLogModel.create({
+                user_id: 0,
+                username: email,
+                ip_address: ipAddress,
+                user_agent: userAgent,
+                status: 'failed',
+                error_message: '验证码错误'
+            });
             res.status(400).json({ error: '验证码无效或已过期' });
             return;
         }
 
         const user = await UserModel.findByEmail(email);
         if (!user) {
+            await LoginLogModel.create({
+                user_id: 0,
+                username: email,
+                ip_address: ipAddress,
+                user_agent: userAgent,
+                status: 'failed',
+                error_message: '账号不存在'
+            });
             res.status(404).json({ error: '该邮箱未注册' });
             return;
         }
 
         if (!user.is_active) {
+            await LoginLogModel.create({
+                user_id: user.id,
+                username: user.username,
+                ip_address: ipAddress,
+                user_agent: userAgent,
+                status: 'failed',
+                error_message: '账号已禁用'
+            });
             res.status(403).json({ error: '账户已被禁用' });
             return;
         }
 
         await UserModel.updateLastLogin(user.id);
         const token = generateToken(user.id);
+
+        await LoginLogModel.create({
+            user_id: user.id,
+            username: user.username,
+            ip_address: ipAddress,
+            user_agent: userAgent,
+            status: 'success'
+        });
 
         res.json({
             message: '登录成功',
@@ -87,7 +120,6 @@ export const loginEmail = async (req: Request, res: Response) => {
 
 // 邮箱验证码注册
 export const registerEmail = async (req: Request, res: Response) => {
-    console.log('DEBUG: Received register-email request:', req.body);
     try {
         const { username, email, password, code } = req.body;
 
@@ -162,8 +194,7 @@ export const resetPassword = async (req: Request, res: Response) => {
             return;
         }
 
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        await UserModel.updatePassword(user.id, hashedPassword);
+        await UserModel.updatePassword(user.id, newPassword);
 
         res.json({ message: '密码重置成功' });
 
@@ -173,7 +204,7 @@ export const resetPassword = async (req: Request, res: Response) => {
     }
 };
 
-// 原有的普通注册 (保留但基本不推荐使用直接注册接口，前端会走带手机号的)
+// 注册
 export const register = async (req: Request, res: Response) => {
     try {
         const { username, email, password } = req.body;
@@ -222,8 +253,11 @@ export const register = async (req: Request, res: Response) => {
     }
 };
 
-// 原有的普通登录
+// 登录
 export const login = async (req: Request, res: Response) => {
+    const ipAddress = (req.headers['x-forwarded-for'] as string) || req.ip || '';
+    const userAgent = req.headers['user-agent'] || '';
+
     try {
         const { username, password } = req.body;
 
@@ -234,23 +268,55 @@ export const login = async (req: Request, res: Response) => {
 
         const user = await UserModel.findByUsername(username);
         if (!user) {
+            await LoginLogModel.create({
+                user_id: 0,
+                username,
+                ip_address: ipAddress,
+                user_agent: userAgent,
+                status: 'failed',
+                error_message: '账号不存在'
+            });
             res.status(401).json({ error: '用户名或密码错误' });
             return;
         }
 
         const isValidPassword = await UserModel.validatePassword(password, user.password);
         if (!isValidPassword) {
+            await LoginLogModel.create({
+                user_id: user.id,
+                username,
+                ip_address: ipAddress,
+                user_agent: userAgent,
+                status: 'failed',
+                error_message: '密码错误'
+            });
             res.status(401).json({ error: '用户名或密码错误' });
             return;
         }
 
         if (!user.is_active) {
+            await LoginLogModel.create({
+                user_id: user.id,
+                username,
+                ip_address: ipAddress,
+                user_agent: userAgent,
+                status: 'failed',
+                error_message: '账号已禁用'
+            });
             res.status(403).json({ error: '账户已被禁用' });
             return;
         }
 
         await UserModel.updateLastLogin(user.id);
         const token = generateToken(user.id);
+
+        await LoginLogModel.create({
+            user_id: user.id,
+            username: user.username,
+            ip_address: ipAddress,
+            user_agent: userAgent,
+            status: 'success'
+        });
 
         res.json({
             message: '登录成功',
@@ -297,3 +363,4 @@ export const getCurrentUser = async (req: AuthRequest, res: Response) => {
         res.status(500).json({ error: '获取用户信息失败' });
     }
 };
+

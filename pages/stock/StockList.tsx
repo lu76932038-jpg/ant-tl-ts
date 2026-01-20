@@ -7,7 +7,7 @@ import { Download, Plus, Eye, ChevronLeft, ChevronRight, ChevronDown, Clock, Pac
 import AddProductModal from '../../components/AddProductModal';
 import DownloadOptionsModal from '../../components/DownloadOptionsModal';
 import ShipProductModal from '../../components/ShipProductModal';
-import { config } from '../../config';
+import { api } from '../../services/api';
 
 const StockList: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
@@ -23,18 +23,12 @@ const StockList: React.FC = () => {
 
     const fetchStocks = async () => {
         try {
-            const response = await fetch(`${config.apiBaseUrl}/api/stocks`);
-            let data = await response.json();
+            let data: any = await api.get('/stocks');
 
             // 如果数据库没数据，则尝试初始化 (基于 MOCK 数据)
             if (data.length === 0) {
-                await fetch(`${config.apiBaseUrl}/api/stocks/initialize`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mockData: MOCK_PRODUCTS })
-                });
-                const retryResponse = await fetch(`${config.apiBaseUrl}/api/stocks`);
-                data = await retryResponse.json();
+                await api.post('/stocks/initialize', { mockData: MOCK_PRODUCTS });
+                data = await api.get('/stocks');
             }
 
             setProducts(data);
@@ -47,19 +41,9 @@ const StockList: React.FC = () => {
 
     const handleAddProduct = async (newProduct: Omit<Product, 'id'>) => {
         try {
-            const response = await fetch(`${config.apiBaseUrl}/api/stocks`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newProduct)
-            });
-
-            if (response.ok) {
-                // Refresh list
-                fetchStocks();
-            } else {
-                console.error('Failed to add product');
-                alert('添加商品失败');
-            }
+            await api.post('/stocks', newProduct);
+            // Refresh list
+            fetchStocks();
         } catch (error) {
             console.error('Error adding product:', error);
             alert('添加商品失败');
@@ -73,22 +57,9 @@ const StockList: React.FC = () => {
 
     const handleShipProduct = async (shipData: { product_model: string; product_name: string; outbound_date: string; quantity: number; customer_name: string; unit_price: number }) => {
         try {
-            const response = await fetch(`${config.apiBaseUrl}/api/shiplist`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(shipData)
-            });
-
-            if (response.ok) {
-                // Ideally we might want to refresh stock list IF we implemented stock decrement logic.
-                // For now, just close modal.
-                // fetchStocks(); 
-                setIsShipModalOpen(false);
-                setSelectedProductForShip(null);
-            } else {
-                console.error('Failed to create shipment record');
-                alert('出库失败');
-            }
+            await api.post('/shiplist', shipData);
+            setIsShipModalOpen(false);
+            setSelectedProductForShip(null);
         } catch (error) {
             console.error('Error creating shipment:', error);
             alert('出库失败');

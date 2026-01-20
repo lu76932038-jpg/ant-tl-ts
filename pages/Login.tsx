@@ -126,7 +126,7 @@ const Login: React.FC = () => {
                 <div className="bg-white/40 backdrop-blur-xl border border-white/40 rounded-[2.5rem] shadow-2xl p-8 space-y-6">
                     <div className="text-center space-y-2">
                         <h1 className="text-4xl font-light text-slate-800 tracking-[0.2em] mb-4">
-                            殸木 <span className="text-sm font-normal opacity-70">V{import.meta.env.VITE_APP_VERSION}</span>
+                            殸木 <span className="text-sm font-normal opacity-70">{import.meta.env.VITE_APP_VERSION}</span>
                         </h1>
                         <div className="h-px w-12 bg-slate-300 mx-auto" />
                     </div>

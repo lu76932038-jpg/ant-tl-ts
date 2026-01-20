@@ -1,26 +1,13 @@
 import { Response } from 'express';
 import { UserModel } from '../models/User';
 import { AuthRequest } from '../middleware/auth';
+import bcrypt from 'bcrypt';
 
 // 获取所有用户 (管理员)
 export const getAllUsers = async (req: AuthRequest, res: Response) => {
     try {
         const users = await UserModel.findAll();
-
-        // 移除密码字段
-        const safeUsers = users.map(user => ({
-            id: user.id,
-            username: user.username,
-            email: user.email,
-            role: user.role,
-            permissions: user.permissions, // Add permissions
-            created_at: user.created_at,
-            updated_at: user.updated_at,
-            last_login: user.last_login,
-            is_active: user.is_active
-        }));
-
-        res.json(safeUsers);
+        res.json(users);
     } catch (error: any) {
         console.error('获取用户列表错误:', error);
         res.status(500).json({ error: '获取用户列表失败' });
@@ -108,15 +95,13 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
         // 鉴于这是一个快速迭代，我们直接在 UserModel 中增加验证逻辑或在此处理
         // 之前的代码显示 UserModel.update 对 password 字段做了加密处理
 
-        // 检查旧密码是否匹配 (UserModel.findByCredentials 逻辑类似)
-        const bcrypt = require('bcryptjs');
         const isMatch = await bcrypt.compare(oldPassword, user.password);
         if (!isMatch) {
             res.status(400).json({ error: '旧密码错误' });
             return;
         }
 
-        await UserModel.update(userId, { password: newPassword });
+        await UserModel.updatePassword(userId, newPassword);
         res.json({ message: '密码修改成功' });
     } catch (error: any) {
         console.error('修改密码错误:', error);

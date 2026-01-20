@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Download, ChevronLeft, ChevronRight, ChevronDown, Plus, Package } from 'lucide-react';
 import { AddEntryModal } from './AddEntryModal';
-import { config } from '../../config';
+import { api } from '../../services/api';
+
 
 interface EntryRecord {
     id: number;
@@ -32,8 +33,7 @@ const EntryList: React.FC = () => {
     const fetchEntryList = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch(`${config.apiBaseUrl}/api/entrylist`);
-            const data = await response.json();
+            const data: any = await api.get('/entrylist');
             setRecords(data);
         } catch (error) {
             console.error('Failed to fetch entry list:', error);
@@ -41,6 +41,7 @@ const EntryList: React.FC = () => {
             setIsLoading(false);
         }
     };
+
 
     const handleEntryAdded = () => {
         fetchEntryList();

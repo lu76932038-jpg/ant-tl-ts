@@ -22,7 +22,8 @@ import {
     Truck,
     ShoppingCart,
     PanelLeftClose,
-    PanelLeftOpen
+    PanelLeftOpen,
+    BookOpen
 } from 'lucide-react';
 import Logo from '../components/Logo';
 
@@ -62,7 +63,14 @@ const SidebarLayout: React.FC = () => {
             label: '殸木小工具',
             icon: <Wrench className="w-5 h-5 text-gray-600" />,
             children: [
-                { label: '询价任务中心', path: '/', icon: <LayoutGrid className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'inquiry_parsing' },
+                {
+                    label: '询价管理',
+                    icon: <LayoutGrid className="w-4 h-4" />,
+                    children: [
+                        { label: '询价解析列表', path: '/', icon: <ClipboardList className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'inquiry_parsing' },
+                        { label: '操作指引', path: '/help', icon: <BookOpen className="w-4 h-4" /> }
+                    ]
+                },
                 { label: 'A&T 订单', path: '/at-orders', icon: <FileSpreadsheet className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'at_orders' },
                 {
                     label: '备货小助手',
@@ -90,7 +98,7 @@ const SidebarLayout: React.FC = () => {
             icon: <Settings className="w-5 h-5 text-slate-400" />,
             children: [
                 { label: '用户管理', path: '/users', icon: <Users className="w-4 h-4" />, roles: ['admin'] },
-                { label: '审计日志', path: '/logs', icon: <History className="w-4 h-4" />, roles: ['admin'] }
+                { label: '登录日志', path: '/login-logs', icon: <History className="w-4 h-4" />, roles: ['admin'] }
             ]
         }
     ];
@@ -217,19 +225,19 @@ const SidebarLayout: React.FC = () => {
             <Link
                 key={item.label}
                 to={item.path!}
-                className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2.5'} py-2 px-3 rounded-xl transition-all duration-200 group
+                className={`flex items-center ${isSidebarCollapsed ? 'justify-center py-3' : 'gap-2.5'} py-2 px-3 rounded-xl transition-all duration-200 group
                     ${isActive
                         ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-lg shadow-slate-800/20'
-                        : 'text-slate-500 hover:text-slate-700 hover:bg-white/70'
+                        : 'text-slate-500 hover:text-slate-700 hover:bg-white'
                     }
-                    ${!isSidebarCollapsed && getLevelStyles()}
+                    ${!isSidebarCollapsed ? getLevelStyles() : 'px-2'}
                 `}
                 title={isSidebarCollapsed ? item.label : ''}
             >
-                <div className={`p-1 rounded-md transition-all duration-200
+                <div className={`p-1.5 rounded-lg transition-all duration-200
                     ${isActive
                         ? 'bg-white/20 text-white'
-                        : 'text-slate-400 group-hover:text-slate-600 group-hover:bg-slate-100/50'
+                        : 'text-slate-400 group-hover:text-slate-700 group-hover:bg-slate-100 shadow-sm'
                     }
                 `}>
                     {React.cloneElement(item.icon as React.ReactElement, {
@@ -320,7 +328,9 @@ const SidebarLayout: React.FC = () => {
                                 {/* 收缩/展开按钮 */}
                                 <button
                                     onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                                    type="button"
                                     className={`
+                                        relative z-50 cursor-pointer
                                         flex items-center justify-center rounded-lg transition-all
                                         hover:bg-white/20 hover:text-white
                                         ${isSidebarCollapsed
@@ -340,7 +350,7 @@ const SidebarLayout: React.FC = () => {
 
             {/* Main Container */}
             <main className="flex-1 flex flex-col min-w-0 bg-[#f7f5f2] relative overflow-hidden">
-                <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+                <div className="flex-1 relative flex flex-col min-h-0">
                     <Outlet />
                 </div>
             </main>

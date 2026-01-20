@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Download, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
-import { config } from '../../config';
+import { api } from '../../services/api';
+
 
 interface ShipRecord {
     id: number;
@@ -28,8 +29,7 @@ const ShipList: React.FC = () => {
 
     const fetchShipList = async () => {
         try {
-            const response = await fetch(`${config.apiBaseUrl}/api/shiplist`);
-            const data = await response.json();
+            const data: any = await api.get('/shiplist');
             setRecords(data);
         } catch (error) {
             console.error('Failed to fetch ship list:', error);
@@ -37,6 +37,7 @@ const ShipList: React.FC = () => {
             setIsLoading(false);
         }
     };
+
 
     const filteredRecords = records.filter(record =>
         record.product_model.toLowerCase().includes(searchTerm.toLowerCase()) ||

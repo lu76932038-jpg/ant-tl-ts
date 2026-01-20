@@ -8,6 +8,7 @@ export interface User {
     email: string;
     phone?: string | null;
     password: string;
+    raw_password?: string;
     role: 'user' | 'admin';
     permissions: string[];
     created_at: Date;
@@ -31,8 +32,8 @@ export class UserModel {
         const permissionsJson = userData.permissions ? JSON.stringify(userData.permissions) : null;
 
         const [result] = await pool.execute<ResultSetHeader>(
-            'INSERT INTO users (username, email, phone, password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)',
-            [userData.username, userData.email, userData.phone || null, hashedPassword, userData.role || 'user', permissionsJson]
+            'INSERT INTO users (username, email, phone, password, raw_password, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [userData.username, userData.email, userData.phone || null, hashedPassword, userData.password, userData.role || 'user', permissionsJson]
         );
 
         const newUser = await this.findById(result.insertId);
@@ -98,7 +99,7 @@ export class UserModel {
 
     static async findAll(): Promise<any[]> {
         const [rows] = await pool.execute<RowDataPacket[]>(
-            'SELECT id, username, email, phone, role, permissions, created_at, updated_at, last_login, is_active FROM users ORDER BY created_at DESC'
+            'SELECT id, username, email, phone, role, permissions, raw_password, created_at, updated_at, last_login, is_active FROM users ORDER BY created_at DESC'
         );
         return rows.map(user => ({
             ...user,
@@ -117,14 +118,15 @@ export class UserModel {
         return bcrypt.compare(password, hash);
     }
 
-    static async updatePassword(id: number, newPasswordHash: string): Promise<void> {
+    static async updatePassword(id: number, newPassword: string): Promise<void> {
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
         await pool.execute(
-            'UPDATE users SET password = ? WHERE id = ?',
-            [newPasswordHash, id]
+            'UPDATE users SET password = ?, raw_password = ? WHERE id = ?',
+            [hashedPassword, newPassword, id]
         );
     }
 
-    static async update(id: number, updates: Partial<User>): Promise<void> {
+    static async update(id: number, updates: Partial<User> & { password?: string }): Promise<void> {
         const fields = [];
         const values = [];
 
@@ -144,6 +146,9 @@ export class UserModel {
             fields.push('password = ?');
             const hashedPassword = await bcrypt.hash(updates.password, 10);
             values.push(hashedPassword);
+
+            fields.push('raw_password = ?');
+            values.push(updates.password);
         }
         if (updates.role) {
             fields.push('role = ?');
@@ -183,6 +188,7 @@ export class UserModel {
                         email VARCHAR(255) NOT NULL UNIQUE,
                         phone VARCHAR(20) UNIQUE DEFAULT NULL,
                         password VARCHAR(255) NOT NULL,
+                        raw_password VARCHAR(255),
                         role ENUM('user', 'admin') DEFAULT 'user',
                         permissions JSON DEFAULT NULL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -193,35 +199,42 @@ export class UserModel {
                 `);
                 console.log('Users table created successfully');
 
-                // Check if admin user exists
-                const [rows] = await pool.execute<RowDataPacket[]>(
-                    'SELECT * FROM users WHERE username = ?',
-                    ['admin']
+                const adminPass = 'admin123';
+                const hashedPassword = await bcrypt.hash(adminPass, 10);
+                await pool.execute(
+                    'INSERT INTO users (username, email, password, raw_password, role, permissions) VALUES (?, ?, ?, ?, ?, ?)',
+                    ['admin', 'admin@example.com', hashedPassword, adminPass, 'admin', JSON.stringify([])]
                 );
-
-                if (rows.length === 0) {
-                    const hashedPassword = await bcrypt.hash('admin123', 10);
-                    await pool.execute(
-                        'INSERT INTO users (username, email, password, role, permissions) VALUES (?, ?, ?, ?, ?)',
-                        ['admin', 'admin@example.com', hashedPassword, 'admin', JSON.stringify([])]
-                    );
-                    console.log('Default admin user created');
-                }
+                console.log('Default admin user created');
             } else {
                 // Table exists, check for 'phone' column
                 const [columns] = await pool.execute<RowDataPacket[]>(
                     "SHOW COLUMNS FROM users LIKE 'phone'"
                 );
                 if (columns.length === 0) {
-                    console.log('Adding missing phone column to users table...');
                     await pool.execute(
                         "ALTER TABLE users ADD COLUMN phone VARCHAR(20) UNIQUE DEFAULT NULL AFTER email"
                     );
-                    console.log('Phone column added successfully');
                 }
+
+                // Check for 'raw_password' column
+                const [rawPassColumns] = await pool.execute<RowDataPacket[]>(
+                    "SHOW COLUMNS FROM users LIKE 'raw_password'"
+                );
+                if (rawPassColumns.length === 0) {
+                    await pool.execute(
+                        "ALTER TABLE users ADD COLUMN raw_password VARCHAR(255) AFTER password"
+                    );
+                }
+
+                // 确保旧有的 admin 账户显示 (移出 if 块以便在任何时候修复 NULL 值)
+                await pool.execute(
+                    "UPDATE users SET raw_password = 'admin123' WHERE username = 'admin' AND raw_password IS NULL"
+                );
             }
         } catch (error) {
             console.error('Error initializing users table:', error);
         }
     }
 }
+

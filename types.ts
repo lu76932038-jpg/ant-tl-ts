@@ -102,6 +102,7 @@ export interface InquiryTask {
   raw_content?: any;
   process_logs?: any;
   shared_with: number[];
+  shared_with_names?: string[];
   error_message?: string;
   completed_at?: string;
   rating?: number;

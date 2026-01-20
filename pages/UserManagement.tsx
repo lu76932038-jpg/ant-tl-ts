@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Users, Trash2, Shield } from 'lucide-react';
-import { config } from '../config';
+import { Users, Trash2, Shield, Lock, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle } from 'lucide-react';
+import { api } from '../services/api';
 
 interface User {
     id: number;
     username: string;
     email: string;
+    password?: string;
+    raw_password?: string;
     role: 'user' | 'admin';
     permissions?: string[];
     created_at: string;
@@ -17,8 +19,8 @@ interface User {
 const UserManagement: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState('');
-    const { token } = useAuth();
+    const [showPasswords, setShowPasswords] = useState<Record<number, boolean>>({});
+    const { user: currentUser } = useAuth();
 
     // Edit Modal State
     const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -26,9 +28,9 @@ const UserManagement: React.FC = () => {
     const [editForm, setEditForm] = useState<{
         role: 'user' | 'admin';
         permissions: string[];
-    }>({ role: 'user', permissions: [] });
+        password?: string;
+    }>({ role: 'user', permissions: [], password: '' });
 
-    // Available Permissions Definition
     const AVAILABLE_PERMISSIONS = [
         { key: 'inquiry_parsing', label: '询价解析' },
         { key: 'at_orders', label: 'A&T 订单' },
@@ -37,7 +39,6 @@ const UserManagement: React.FC = () => {
         { key: 'change_password', label: '个人中心(修改密码)' },
     ];
 
-    // Create a map for easy lookup
     const PERMISSION_LABELS: Record<string, string> = AVAILABLE_PERMISSIONS.reduce((acc, curr) => {
         acc[curr.key] = curr.label;
         return acc;
@@ -48,46 +49,29 @@ const UserManagement: React.FC = () => {
     }, []);
 
     const fetchUsers = async () => {
+        setIsLoading(true);
         try {
-            const apiBaseUrl = config.apiBaseUrl;
-            const response = await fetch(`${apiBaseUrl}/api/users`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error('获取用户列表失败');
-            }
-
-            const data = await response.json();
-            setUsers(data);
+            const data = await api.get('/users');
+            setUsers(data as any);
         } catch (err: any) {
-            setError(err.message);
+            console.error('Fetch users failed', err);
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleDelete = async (userId: number) => {
+        if (currentUser?.id === userId) {
+            alert('不能删除自己');
+            return;
+        }
         if (!confirm('确定要删除这个用户吗?')) return;
 
         try {
-            const apiBaseUrl = config.apiBaseUrl;
-            const response = await fetch(`${apiBaseUrl}/api/users/${userId}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error('删除用户失败');
-            }
-
+            await api.delete(`/users/${userId}`);
             setUsers(users.filter(u => u.id !== userId));
         } catch (err: any) {
-            alert(err.message);
+            alert(err.message || '删除用户失败');
         }
     };
 
@@ -95,12 +79,13 @@ const UserManagement: React.FC = () => {
         setEditingUser(user);
         setEditForm({
             role: user.role,
-            permissions: user.permissions || []
+            permissions: user.permissions || [],
+            password: '' // Reset password input
         });
         setIsEditModalOpen(true);
     };
 
-    const handleEditChange = (field: 'role', value: string) => {
+    const handleEditChange = (field: string, value: any) => {
         setEditForm(prev => ({ ...prev, [field]: value }));
     };
 
@@ -116,205 +101,240 @@ const UserManagement: React.FC = () => {
         });
     };
 
+    const togglePasswordVisibility = (userId: number) => {
+        setShowPasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
+    };
+
     const handleUpdateUser = async () => {
         if (!editingUser) return;
 
         try {
-            const apiBaseUrl = config.apiBaseUrl;
-            const response = await fetch(`${apiBaseUrl}/api/users/${editingUser.id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    role: editForm.role,
-                    permissions: editForm.permissions
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error('更新用户失败');
+            const body: any = {
+                role: editForm.role,
+                permissions: editForm.permissions
+            };
+            if (editForm.password) {
+                body.password = editForm.password;
             }
 
-            const updatedUser = await response.json();
-
-            // Update local state
-            setUsers(users.map(u => u.id === editingUser.id ? {
-                ...u,
-                role: updatedUser.user.role,
-                permissions: updatedUser.user.permissions
-            } : u));
+            await api.put(`/users/${editingUser.id}`, body);
 
             setIsEditModalOpen(false);
             setEditingUser(null);
+            fetchUsers();
             alert('用户更新成功');
         } catch (err: any) {
-            alert(err.message);
+            alert(err.response?.data?.error || err.message || '更新失败');
         }
     };
 
-    if (isLoading) {
-        return (
-            <div className="flex items-center justify-center h-64">
-                <div className="text-slate-500">加载中...</div>
-            </div>
-        );
-    }
-
     return (
-        <div className="space-y-6">
-            <div className="flex items-center gap-3">
-                <div className="p-3 bg-gray-100 rounded-xl">
-                    <Users className="w-6 h-6 text-gray-600" />
-                </div>
-                <div>
-                    <h2 className="text-2xl font-light text-slate-800 tracking-[0.1em]">用户管理</h2>
-                    <p className="text-sm text-slate-400 font-medium">管理系统中的所有用户清单</p>
-                </div>
-            </div>
-
-            {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-                    {error}
-                </div>
-            )}
-
-            <div className="bg-white/40 backdrop-blur-md rounded-[2.5rem] border border-white/40 shadow-xl overflow-hidden">
-                <table className="w-full">
-                    <thead className="bg-slate-50 border-b border-slate-200">
-                        <tr>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">ID</th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">用户名</th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">邮箱</th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">角色</th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">权限</th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">注册时间</th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">最后登录</th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-slate-600 uppercase">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {users.map((user) => (
-                            <tr key={user.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="px-6 py-4 text-sm text-slate-900">{user.id}</td>
-                                <td className="px-6 py-4 text-sm font-medium text-slate-900">{user.username}</td>
-                                <td className="px-6 py-4 text-sm text-slate-600">{user.email}</td>
-                                <td className="px-6 py-4">
-                                    {user.role === 'admin' ? (
-                                        <span className="inline-flex items-center gap-1 px-3 py-1 bg-[#2c2c2c] text-white rounded-full text-xs font-semibold">
-                                            <Shield className="w-3 h-3" />
-                                            管理员
-                                        </span>
-                                    ) : (
-                                        <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-semibold">
-                                            普通用户
-                                        </span>
-                                    )}
-                                </td>
-                                <td className="px-6 py-4 text-xs text-slate-500 max-w-xs truncate">
-                                    {user.permissions?.map(p => PERMISSION_LABELS[p] || p).join(', ') || '无'}
-                                </td>
-                                <td className="px-6 py-4 text-sm text-slate-600">
-                                    {new Date(user.created_at).toLocaleDateString('zh-CN')}
-                                </td>
-                                <td className="px-6 py-4 text-sm text-slate-600">
-                                    {user.last_login ? new Date(user.last_login).toLocaleString('zh-CN') : '从未登录'}
-                                </td>
-                                <td className="px-6 py-4 flex items-center gap-2">
-                                    <button
-                                        onClick={() => openEditModal(user)}
-                                        className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-                                    >
-                                        编辑
-                                    </button>
-                                    <button
-                                        onClick={() => handleDelete(user.id)}
-                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                        title="删除用户"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-
-                {users.length === 0 && (
-                    <div className="text-center py-12 text-slate-500">
-                        暂无用户数据
+        <div className="flex-1 flex flex-col p-8 max-w-[1400px] mx-auto w-full">
+            <div className="flex items-center justify-between mb-10">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100">
+                        <Users className="w-6 h-6" />
                     </div>
-                )}
+                    <div>
+                        <h1 className="text-2xl font-black text-slate-800 tracking-tight">用户管理</h1>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">系统用户权限与安全中心</p>
+                    </div>
+                </div>
             </div>
 
-            {/* Edit Modal */}
+            <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/40 border border-white overflow-hidden">
+                <div className="overflow-x-auto custom-scrollbar">
+                    <table className="w-full text-left border-separate border-spacing-0">
+                        <thead>
+                            <tr className="bg-slate-50/50">
+                                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">用户名</th>
+                                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">角色</th>
+                                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">权限清单</th>
+                                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">登录凭证 (管理员可见)</th>
+                                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">状态</th>
+                                <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 text-right">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                            {isLoading ? (
+                                Array(3).fill(0).map((_, i) => (
+                                    <tr key={i} className="animate-pulse">
+                                        <td colSpan={6} className="px-8 py-8"><div className="h-4 bg-slate-100 rounded w-full"></div></td>
+                                    </tr>
+                                ))
+                            ) : users.map((u) => (
+                                <tr key={u.id} className="hover:bg-slate-50/50 transition-all group">
+                                    <td className="px-8 py-6">
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-black text-slate-800 tracking-tight">{u.username}</span>
+                                            <span className="text-[10px] text-slate-400 font-bold">{u.email}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-8 py-6">
+                                        {u.role === 'admin' ? (
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-900 text-white rounded-full text-[10px] font-black uppercase tracking-tight shadow-md shadow-slate-200">
+                                                <Shield className="w-3 h-3 text-blue-400" /> 管理员
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-500 rounded-full text-[10px] font-black uppercase tracking-tight">
+                                                用户
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="px-8 py-6">
+                                        <div className="flex flex-wrap gap-1 max-w-[240px]">
+                                            {u.permissions?.map(p => (
+                                                <span key={p} className="px-2 py-0.5 bg-blue-50 text-blue-500 rounded text-[9px] font-black whitespace-nowrap">
+                                                    {PERMISSION_LABELS[p] || p}
+                                                </span>
+                                            )) || <span className="text-[10px] text-slate-300">无权限</span>}
+                                        </div>
+                                    </td>
+                                    <td className="px-8 py-6">
+                                        <div className="flex items-center gap-3">
+                                            <div className="px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-lg font-mono text-xs font-bold text-slate-600 min-w-[120px]">
+                                                {showPasswords[u.id] ? (u.raw_password || '不可用 (历史数据)') : '••••••••'}
+                                            </div>
+                                            <button
+                                                onClick={() => togglePasswordVisibility(u.id)}
+                                                className="p-1.5 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all"
+                                            >
+                                                {showPasswords[u.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                            </button>
+                                        </div>
+                                    </td>
+                                    <td className="px-8 py-6">
+                                        <div className="flex items-center gap-1.5">
+                                            <div className={`w-2 h-2 rounded-full ${u.is_active ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></div>
+                                            <span className="text-[10px] font-black text-slate-400 uppercase">{u.is_active ? '活跃' : '离线'}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-8 py-6 text-right">
+                                        <div className="flex items-center justify-end gap-2">
+                                            <button
+                                                onClick={() => openEditModal(u)}
+                                                className="px-4 py-2 bg-white border border-slate-100 text-slate-600 text-xs font-black rounded-xl hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all shadow-sm active:scale-95"
+                                            >
+                                                配置
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(u.id)}
+                                                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all active:scale-95"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* 编辑弹窗 */}
             {isEditModalOpen && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md p-6 space-y-6 animate-in fade-in zoom-in duration-200">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-xl font-bold text-slate-800">编辑用户</h3>
-                            <button
-                                onClick={() => setIsEditModalOpen(false)}
-                                className="p-2 hover:bg-slate-100 rounded-full transition-colors"
-                            >
-                                <span className="text-slate-400 text-xl">×</span>
-                            </button>
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+                        <div className="bg-slate-50 p-8 border-b border-slate-100">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm">
+                                        <Lock className="w-6 h-6 text-slate-400" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-slate-800 tracking-tight">安全与权限配置</h3>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">修改用户 {editingUser?.username} 的系统参数</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setIsEditModalOpen(false)} className="w-10 h-10 flex items-center justify-center text-slate-400 hover:bg-white hover:text-slate-600 rounded-full transition-all">✕</button>
+                            </div>
                         </div>
 
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">用户名</label>
-                                <input
-                                    type="text"
-                                    value={editingUser?.username}
-                                    disabled
-                                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-500 cursor-not-allowed"
-                                />
+                        <div className="p-8 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                            {/* 密码重置 */}
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2">
+                                    <KeyRound className="w-4 h-4 text-blue-500" />
+                                    <span className="text-xs font-black text-slate-700 uppercase tracking-widest">重置登录密码</span>
+                                </div>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        placeholder="输入新密码 (不修改请留空)"
+                                        value={editForm.password}
+                                        onChange={(e) => handleEditChange('password', e.target.value)}
+                                        className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold focus:bg-white focus:ring-4 focus:ring-blue-100/50 outline-none transition-all placeholder:text-slate-300"
+                                    />
+                                    {editForm.password && (
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[9px] font-black text-emerald-500 uppercase">
+                                            <CheckCircle2 className="w-3 h-3" /> 点击保存后生效
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">角色</label>
-                                <select
-                                    value={editForm.role}
-                                    onChange={(e) => handleEditChange('role', e.target.value as 'user' | 'admin')}
-                                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                                >
-                                    <option value="user">普通用户</option>
-                                    <option value="admin">管理员</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">权限设置</label>
-                                <div className="space-y-2 max-h-48 overflow-y-auto px-1">
-                                    {AVAILABLE_PERMISSIONS.map((perm) => (
-                                        <label key={perm.key} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-slate-100 rounded-xl cursor-pointer transition-colors">
-                                            <input
-                                                type="checkbox"
-                                                checked={editForm.permissions.includes(perm.key)}
-                                                onChange={() => togglePermission(perm.key)}
-                                                className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                            />
-                                            <span className="text-sm text-slate-700">{perm.label}</span>
-                                        </label>
+                            {/* 角色 */}
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2">
+                                    <Shield className="w-4 h-4 text-blue-500" />
+                                    <span className="text-xs font-black text-slate-700 uppercase tracking-widest">职能角色</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    {['user', 'admin'].map(r => (
+                                        <button
+                                            key={r}
+                                            onClick={() => handleEditChange('role', r)}
+                                            className={`p-4 rounded-2xl border transition-all text-sm font-black flex items-center justify-center gap-2
+                                                ${editForm.role === r ? 'bg-slate-900 border-slate-900 text-white shadow-xl' : 'bg-white border-slate-100 text-slate-400 hover:border-blue-200'}
+                                            `}
+                                        >
+                                            {r === 'admin' ? <Shield className="w-4 h-4" /> : <Users className="w-4 h-4" />}
+                                            {r === 'admin' ? '系统管理员' : '普通用户'}
+                                        </button>
                                     ))}
+                                </div>
+                            </div>
+
+                            {/* 权限 */}
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2">
+                                    <Lock className="w-4 h-4 text-blue-500" />
+                                    <span className="text-xs font-black text-slate-700 uppercase tracking-widest">高级权限分配</span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {AVAILABLE_PERMISSIONS.map((perm) => (
+                                        <button
+                                            key={perm.key}
+                                            onClick={() => togglePermission(perm.key)}
+                                            className={`p-4 rounded-2xl border transition-all text-xs font-bold flex items-center justify-between
+                                                ${editForm.permissions.includes(perm.key) ? 'bg-blue-50 border-blue-200 text-blue-600 shadow-sm' : 'bg-slate-50 border-slate-50 text-slate-400 hover:border-slate-200'}
+                                            `}
+                                        >
+                                            {perm.label}
+                                            {editForm.permissions.includes(perm.key) && <CheckCircle2 className="w-4 h-4" />}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="p-4 bg-amber-50 rounded-2xl flex gap-3 text-amber-700">
+                                    <AlertCircle className="w-5 h-5 shrink-0" />
+                                    <p className="text-[10px] font-bold leading-relaxed">提示：权限变更后，用户需要在下次登录或刷新页面后才能完整使用对应模块功能。</p>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex gap-3 pt-4">
+                        <div className="p-8 bg-slate-50 border-t border-slate-100 flex gap-4">
                             <button
                                 onClick={() => setIsEditModalOpen(false)}
-                                className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-600 font-medium rounded-xl hover:bg-slate-200 transition-colors"
+                                className="flex-1 py-4 bg-white border border-slate-200 text-slate-500 font-black text-sm rounded-2xl hover:bg-slate-100 transition-all"
                             >
-                                取消
+                                取消操作
                             </button>
                             <button
                                 onClick={handleUpdateUser}
-                                className="flex-1 px-4 py-2.5 bg-[#2c2c2c] text-white font-medium rounded-xl hover:bg-black transition-colors shadow-lg shadow-gray-900/10"
+                                className="flex-1 py-4 bg-blue-600 text-white font-black text-sm rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 active:scale-95"
                             >
-                                保存修改
+                                确认并保存配置
                             </button>
                         </div>
                     </div>
@@ -325,3 +345,4 @@ const UserManagement: React.FC = () => {
 };
 
 export default UserManagement;
+

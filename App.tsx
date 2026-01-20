@@ -8,9 +8,10 @@ import ForgotPassword from './pages/ForgotPassword';
 import Layout from './pages/Layout';
 import MainApp from './pages/MainApp';
 import UserManagement from './pages/UserManagement';
-import AuditLogs from './pages/AuditLogs';
+import LoginLogs from './pages/LoginLogs';
 import ProfileInfo from './pages/ProfileInfo';
 import ChangePassword from './pages/ChangePassword';
+import HelpDocs from './pages/HelpDocs';
 import AtOrders from './pages/AtOrders';
 import TrainTicketZip from './pages/TrainTicketZip';
 import StockList from './pages/stock/StockList';
@@ -18,7 +19,8 @@ import ShipList from './pages/stock/ShipList';
 import EntryList from './pages/stock/EntryList';
 import PurchaseOrderList from './pages/stock/PurchaseOrderList';
 import ProductDetail from './pages/stock/ProductDetail';
-import InquiryHistory from './pages/InquiryHistory';
+import InquiryList from './pages/inquiry/InquiryList';
+import InquiryDetail from './pages/inquiry/InquiryDetail';
 
 const App: React.FC = () => {
     return (
@@ -40,10 +42,12 @@ const App: React.FC = () => {
                             </ProtectedRoute>
                         }
                     >
-                        <Route index element={<InquiryHistory />} />
-                        <Route path="inquiry-history" element={<InquiryHistory />} />
+                        <Route index element={<InquiryList />} />
+                        <Route path="inquiry-history" element={<InquiryList />} />
+                        <Route path="inquiry/:id" element={<InquiryDetail />} />
                         <Route path="profile" element={<ProfileInfo />} />
                         <Route path="change-password" element={<ChangePassword />} />
+                        <Route path="help" element={<HelpDocs />} />
                         <Route path="at-orders" element={<AtOrders />} />
 
                         {/* 备货小助手 */}
@@ -71,10 +75,10 @@ const App: React.FC = () => {
                             }
                         />
                         <Route
-                            path="logs"
+                            path="login-logs"
                             element={
                                 <ProtectedRoute requireAdmin>
-                                    <AuditLogs />
+                                    <LoginLogs />
                                 </ProtectedRoute>
                             }
                         />

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingCart, CheckCircle, AlertTriangle, Plus } from 'lucide-react';
-import { config } from '../../config';
+import { api } from '../../services/api';
+
 
 interface Suggestion {
     sku: string;
@@ -37,58 +38,54 @@ const PurchaseOrderList: React.FC = () => {
     const fetchSuggestions = async () => {
         setIsLoading(true);
         try {
-            const res = await fetch(`${config.apiBaseUrl}/api/purchase-orders/suggestions`);
-            setSuggestions(await res.json());
+            const data: any = await api.get('/purchase-orders/suggestions');
+            setSuggestions(data);
         } finally {
             setIsLoading(false);
         }
     };
+
 
     const fetchOrders = async () => {
         setIsLoading(true);
         try {
-            const res = await fetch(`${config.apiBaseUrl}/api/purchase-orders`);
-            setOrders(await res.json());
+            const data: any = await api.get('/purchase-orders');
+            setOrders(data);
         } finally {
             setIsLoading(false);
         }
     };
 
+
     const handleCreatePO = async (suggestion: Suggestion) => {
         if (!confirm(`确认要为 ${suggestion.sku} 创建采购单吗?`)) return;
         try {
-            const res = await fetch(`${config.apiBaseUrl}/api/purchase-orders`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sku: suggestion.sku,
-                    product_name: suggestion.product_name,
-                    quantity: suggestion.suggested_qty,
-                    order_date: new Date().toISOString().split('T')[0],
-                    supplier_info: JSON.stringify({ name: suggestion.supplier })
-                })
+            await api.post('/purchase-orders', {
+                sku: suggestion.sku,
+                product_name: suggestion.product_name,
+                quantity: suggestion.suggested_qty,
+                order_date: new Date().toISOString().split('T')[0],
+                supplier_info: JSON.stringify({ name: suggestion.supplier })
             });
-            if (res.ok) {
-                alert('采购单已创建');
-                fetchSuggestions();
-            }
+            alert('采购单已创建');
+            fetchSuggestions();
         } catch (error) {
             console.error(error);
         }
     };
 
+
     const handleConfirmPO = async (id: number) => {
         if (!confirm('确认采购? 将自动生成入库单。')) return;
         try {
-            const res = await fetch(`${config.apiBaseUrl}/api/purchase-orders/${id}/confirm`, { method: 'POST' });
-            if (res.ok) {
-                alert('已确认采购，请前往入库清单查看');
-                fetchOrders();
-            }
+            await api.post(`/purchase-orders/${id}/confirm`);
+            alert('已确认采购，请前往入库清单查看');
+            fetchOrders();
         } catch (error) {
             console.error(error);
         }
     };
+
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-[#f5f5f7]">

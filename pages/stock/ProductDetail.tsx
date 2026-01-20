@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
-import { config } from '../../config';
+import { api } from '../../services/api';
+
 
 
 
@@ -115,9 +116,7 @@ const ProductDetail: React.FC = () => {
 
     const fetchProductDetail = async () => {
         try {
-            const response = await fetch(`${config.apiBaseUrl}/api/products/${sku}/detail`);
-            if (!response.ok) throw new Error('Product not found');
-            const result = await response.json();
+            const result: any = await api.get(`/products/${sku}/detail`);
             setData(result);
         } catch (error) {
             console.error('Failed to fetch details', error);
@@ -126,10 +125,10 @@ const ProductDetail: React.FC = () => {
         }
     };
 
+
     const fetchStrategy = async () => {
         try {
-            const response = await fetch(`${config.apiBaseUrl}/api/products/${sku}/strategy`);
-            const result = await response.json();
+            const result: any = await api.get(`/products/${sku}/strategy`);
             setStrategy(result.strategy);
             setSupplier(result.supplier);
             setEditSupplierInfo(result.supplier);
@@ -157,51 +156,43 @@ const ProductDetail: React.FC = () => {
         }
     };
 
+
     const fetchLogs = async () => {
         try {
-            const response = await fetch(`${config.apiBaseUrl}/api/products/${sku}/logs`);
-            const result = await response.json();
+            const result: any = await api.get(`/products/${sku}/logs`);
             setLogs(result);
         } catch (error) {
             console.error('Failed to fetch logs', error);
         }
     };
 
+
     const handleSaveStrategy = async (supplierOverride?: SupplierInfo) => {
         if (!strategy) return;
         setIsSaving(true);
         try {
             const supplierToSave = supplierOverride || editSupplierInfo;
-            const response = await fetch(`${config.apiBaseUrl}/api/products/${sku}/strategy`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...strategy,
-                    start_year_month: selectedStartMonth,
-                    forecast_year_month: selectedForecastMonth,
-                    safety_stock_days: editSafetyStock,
-                    benchmark_type: benchmarkType,
-                    mom_range: momRange,
-                    mom_time_sliders: momTimeSliders,
-                    mom_weight_sliders: momWeightSliders,
-                    yoy_range: yoyRange,
-                    yoy_weight_sliders: yoyWeightSliders,
-                    ratio_adjustment: ratioAdjustment,
-                    forecast_overrides: forecastOverrides,
-                    calculated_forecasts: calculatedForecasts,
-                    supplier_info: supplierToSave,
-                    log_content: `更新库存策略配置: 安全库存 ${editSafetyStock} 个月, 补货模式: ${replenishmentMode === 'fast' ? '快速补货' : '经济补货'}`
-                })
+            const result: any = await api.post(`/products/${sku}/strategy`, {
+                ...strategy,
+                start_year_month: selectedStartMonth,
+                forecast_year_month: selectedForecastMonth,
+                safety_stock_days: editSafetyStock,
+                benchmark_type: benchmarkType,
+                mom_range: momRange,
+                mom_time_sliders: momTimeSliders,
+                mom_weight_sliders: momWeightSliders,
+                yoy_range: yoyRange,
+                yoy_weight_sliders: yoyWeightSliders,
+                ratio_adjustment: ratioAdjustment,
+                forecast_overrides: forecastOverrides,
+                calculated_forecasts: calculatedForecasts,
+                supplier_info: supplierToSave,
+                log_content: `更新库存策略配置: 安全库存 ${editSafetyStock} 个月, 补货模式: ${replenishmentMode === 'fast' ? '快速补货' : '经济补货'}`
             });
-            const result = await response.json();
-            if (response.ok) {
-                // Refresh data
-                setStrategy(result.strategy);
-                fetchLogs(); // Refresh logs to show auto-approval
-                alert('策略更新成功！(系统自动审批通过)');
-            } else {
-                alert('保存失败');
-            }
+            // Refresh data
+            setStrategy(result.strategy);
+            fetchLogs(); // Refresh logs to show auto-approval
+            alert('策略更新成功！(系统自动审批通过)');
         } catch (error) {
             console.error('Save failed', error);
             alert('保存失败');
@@ -209,6 +200,7 @@ const ProductDetail: React.FC = () => {
             setIsSaving(false);
         }
     };
+
 
     const handleExportExcel = () => {
         if (!displayData || displayData.length === 0) {
@@ -526,34 +518,28 @@ const ProductDetail: React.FC = () => {
         // Save Configuration and Results to Backend
         // We use newCalculated directly to ensure we save the latest data
         setIsSaving(true);
-        fetch(`${config.apiBaseUrl}/api/products/${sku}/strategy`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                ...strategy,
-                start_year_month: selectedStartMonth,
-                forecast_year_month: selectedForecastMonth,
-                safety_stock_days: editSafetyStock,
-                benchmark_type: benchmarkType,
-                mom_range: momRange,
-                mom_time_sliders: momTimeSliders,
-                mom_weight_sliders: momWeightSliders,
-                yoy_range: yoyRange,
-                yoy_weight_sliders: yoyWeightSliders,
-                ratio_adjustment: ratioAdjustment,
-                forecast_overrides: forecastOverrides, // Current overrides
-                calculated_forecasts: newCalculated    // Newly calculated
-            })
-        }).then(async (res) => {
-            if (res.ok) {
-                const result = await res.json();
-                setStrategy(result.strategy);
-                fetchLogs();
-            }
+        api.post(`/products/${sku}/strategy`, {
+            ...strategy,
+            start_year_month: selectedStartMonth,
+            forecast_year_month: selectedForecastMonth,
+            safety_stock_days: editSafetyStock,
+            benchmark_type: benchmarkType,
+            mom_range: momRange,
+            mom_time_sliders: momTimeSliders,
+            mom_weight_sliders: momWeightSliders,
+            yoy_range: yoyRange,
+            yoy_weight_sliders: yoyWeightSliders,
+            ratio_adjustment: ratioAdjustment,
+            forecast_overrides: forecastOverrides, // Current overrides
+            calculated_forecasts: newCalculated    // Newly calculated
+        }).then((result: any) => {
+            setStrategy(result.strategy);
+            fetchLogs();
         }).finally(() => setIsSaving(false));
 
         setCalculatedForecasts(newCalculated);
     };
+
 
     const handleCreatePO = async () => {
         if (!data || !strategy) return;
@@ -564,34 +550,26 @@ const ProductDetail: React.FC = () => {
             const qty = strategy.eoq || 0;
             const supplierName = editSupplierInfo?.name || '未知供应商';
 
-            const response = await fetch(`${config.apiBaseUrl}/api/purchase-orders`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    sku: data.basic.sku,
-                    product_name: data.basic.name,
-                    quantity: qty,
-                    order_date: new Date().toISOString().split('T')[0],
-                    supplier_info: JSON.stringify(editSupplierInfo || {}),
-                    status: 'DRAFT',
-                    log_content: `生成采购单: 建议补货数量 ${qty.toLocaleString()} 件, 供应商: ${supplierName}`
-                })
+            await api.post('/purchase-orders', {
+                sku: data.basic.sku,
+                product_name: data.basic.name,
+                quantity: qty,
+                order_date: new Date().toISOString().split('T')[0],
+                supplier_info: JSON.stringify(editSupplierInfo || {}),
+                status: 'DRAFT',
+                log_content: `生成采购单: 建议补货数量 ${qty.toLocaleString()} 件, 供应商: ${supplierName}`
             });
 
-            if (response.ok) {
-                alert('采购单草稿生成成功！请前往采购管理查看。');
-            } else {
-                const errorData = await response.json().catch(() => ({}));
-                const errorMsg = errorData.error || errorData.message || `HTTP ${response.status}`;
-                alert(`采购单生成失败：${errorMsg}`);
-            }
-        } catch (e) {
+            alert('采购单草稿生成成功！请前往采购管理查看。');
+        } catch (e: any) {
             console.error(e);
-            alert(`采购单生成错误：${e instanceof Error ? e.message : '网络连接失败，请检查网络后重试'}`);
+            const errorMsg = e.response?.data?.error || e.message || '网络连接失败';
+            alert(`采购单生成失败：${errorMsg}`);
         } finally {
             setIsCreatingPO(false);
         }
     };
+
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-[#f5f5f7] print:h-auto print:overflow-visible">

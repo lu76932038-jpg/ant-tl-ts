@@ -12,6 +12,7 @@ export interface InquiryTask {
     raw_content?: any; // JSON - AI解析前的原始清单
     process_logs?: any; // JSON - 解析过程日志
     shared_with: number[]; // Array of User IDs
+    shared_with_names?: string[]; // Array of Usernames
     error_message?: string;
     completed_at?: Date;
     rating?: number; // 1: 满意, -1: 不满意
@@ -114,11 +115,23 @@ export class InquiryTaskModel {
         if (rows.length === 0) return null;
 
         const task = rows[0] as InquiryTask;
-        return {
+        const result = {
             ...task,
             parsed_result: typeof task.parsed_result === 'string' ? JSON.parse(task.parsed_result) : task.parsed_result,
             shared_with: typeof task.shared_with === 'string' ? JSON.parse(task.shared_with) : (task.shared_with || [])
         };
+
+        if (result.shared_with.length > 0) {
+            const [userRows] = await pool.execute<RowDataPacket[]>(
+                `SELECT username FROM users WHERE id IN (${result.shared_with.map(() => '?').join(',')})`,
+                result.shared_with
+            );
+            result.shared_with_names = userRows.map(r => r.username);
+        } else {
+            result.shared_with_names = [];
+        }
+
+        return result;
     }
 
     // Find tasks for a user (Owned + Shared)
@@ -133,11 +146,46 @@ export class InquiryTaskModel {
             [userId, userId]
         );
 
-        return rows.map(row => ({
+        const tasks = rows.map(row => ({
             ...row,
             parsed_result: typeof row.parsed_result === 'string' ? JSON.parse(row.parsed_result) : row.parsed_result,
             shared_with: typeof row.shared_with === 'string' ? JSON.parse(row.shared_with) : (row.shared_with || [])
         })) as InquiryTask[];
+
+        return await this.attachSharedWithNames(tasks);
+    }
+
+    // Find ALL tasks (Admin only)
+    static async findAll(): Promise<InquiryTask[]> {
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            `SELECT it.*, u.username as user_name 
+             FROM inquiry_tasks it
+             LEFT JOIN users u ON it.user_id = u.id
+             ORDER BY it.created_at DESC`
+        );
+
+        const tasks = rows.map(row => ({
+            ...row,
+            parsed_result: typeof row.parsed_result === 'string' ? JSON.parse(row.parsed_result) : row.parsed_result,
+            shared_with: typeof row.shared_with === 'string' ? JSON.parse(row.shared_with) : (row.shared_with || [])
+        })) as InquiryTask[];
+
+        return await this.attachSharedWithNames(tasks);
+    }
+
+    private static async attachSharedWithNames(tasks: InquiryTask[]): Promise<InquiryTask[]> {
+        for (const task of tasks) {
+            if (task.shared_with && task.shared_with.length > 0) {
+                const [userRows] = await pool.execute<RowDataPacket[]>(
+                    `SELECT username FROM users WHERE id IN (${task.shared_with.map(() => '?').join(',')})`,
+                    task.shared_with
+                );
+                task.shared_with_names = userRows.map(r => r.username);
+            } else {
+                task.shared_with_names = [];
+            }
+        }
+        return tasks;
     }
 
     // Update task sharing

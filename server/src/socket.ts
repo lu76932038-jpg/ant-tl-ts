@@ -20,6 +20,12 @@ export const initSocket = (server: HttpServer) => {
             console.log(`用户 ${userId} 加入了房间 ${room}`);
         });
 
+        socket.on('join_admin', () => {
+            const room = 'admin_room';
+            socket.join(room);
+            console.log(`管理员加入房间 ${room}`);
+        });
+
         socket.on('disconnect', () => {
             console.log('用户已断开 WebSocket');
         });
@@ -39,5 +45,7 @@ export const getIO = () => {
 export const notifyTaskUpdate = (userId: number, task: any) => {
     if (io) {
         io.to(`user_${userId}`).emit('task_updated', task);
+        // 同时通知管理员
+        io.to('admin_room').emit('task_updated', task);
     }
 };

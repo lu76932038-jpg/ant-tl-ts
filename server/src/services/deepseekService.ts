@@ -3,7 +3,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import { ParsedInquiryItem } from '../types';
 import { normalizeInquiryData } from "../utils/inquiryUtils";
 import { config } from '../config/env';
-import { EXTRACT_INSTRUCTION_DEEPSEEK, SQL_INSTRUCTION, ANSWER_INSTRUCTION } from '../config/prompts';
+import { EXTRACT_INSTRUCTION_DEEPSEEK, SQL_INSTRUCTION, ANSWER_INSTRUCTION, RESTORE_RAW_TABLE_INSTRUCTION } from '../config/prompts';
 
 /**
  * 将自然语言转换为针对 ant_order 表的查询 SQL (DeepSeek 版)
@@ -87,16 +87,14 @@ export const generateSqlForOrdersDeepSeek = async (prompt: string): Promise<{ sq
  */
 export const extractDataFromContent = async (
     content: string | { mimeType: string; data: string }
-): Promise<ParsedInquiryItem[]> => {
+): Promise<{ data: ParsedInquiryItem[], debug: { prompt: string, response: string, maskedContent?: string } }> => {
     if (!config.ai.deepseekKey) {
         throw new Error("服务端未配置 DeepSeek API Key");
     }
 
-    // 如果传入的是非文本内容（图片），DeepSeek 暂不处理，直接返回空或报错
-    // 理论上 Controller 层已经做了 fallback，这里再次防御
     if (typeof content !== 'string') {
         console.warn("[DeepSeek]暂不支持图片分析，请检查调用逻辑");
-        return [];
+        return { data: [], debug: { prompt: "", response: "" } };
     }
 
     const options: any = {
@@ -111,14 +109,7 @@ export const extractDataFromContent = async (
     const openai = new OpenAI(options);
 
     const systemInstruction = EXTRACT_INSTRUCTION_DEEPSEEK;
-
-    // 计算 token 估算（每 4 个字符约 1 token）
-    const contentStrForTokens = typeof content === 'string' ? content : JSON.stringify(content);
-    const estimatedTokens = Math.ceil(contentStrForTokens.length / 4);
-    const DEEPSEEK_MAX_TOKENS = 16000; // DeepSeek 输入上限约 16k tokens
-    if (estimatedTokens > DEEPSEEK_MAX_TOKENS) {
-        console.warn(`[DeepSeek] 内容可能超过 token 限制 (${estimatedTokens} > ${DEEPSEEK_MAX_TOKENS})，建议拆分后重试`);
-    }
+    const contentStrForTokens = content;
 
     // 构造请求消息
     const messages = [
@@ -135,34 +126,36 @@ export const extractDataFromContent = async (
         });
 
         const resultText = completion.choices[0].message.content || "[]";
-        // Attempt to parse JSON
-        let data: any;
+        let parsedData: any;
         try {
-            // Check if result is wrapped in a key or is direct array
             const parsed = JSON.parse(resultText);
             if (Array.isArray(parsed)) {
-                data = parsed;
+                parsedData = parsed;
             } else if (parsed.items && Array.isArray(parsed.items)) {
-                data = parsed.items; // handle case where LLM wraps in { items: [...] }
+                parsedData = parsed.items;
             } else {
-                // If it's a single object, wrap in array
-                data = [parsed];
+                parsedData = [parsed];
             }
         } catch (e) {
             console.error("DeepSeek JSON Parse Error", e);
-            return [];
+            parsedData = [];
         }
 
-        // Map to ParsedInquiryItem to ensure type safety
         console.log('[DeepSeek] 结束请求:', new Date().toISOString());
 
-        return normalizeInquiryData(data);
+        return {
+            data: normalizeInquiryData(parsedData),
+            debug: {
+                prompt: JSON.stringify(messages, null, 2),
+                response: resultText,
+                maskedContent: contentStrForTokens // 暂用原内容，如需脱敏逻辑可在此实现
+            }
+        };
 
     } catch (error) {
         console.error("DeepSeek Extraction Error:", error);
         throw error;
     }
-
 };
 
 /**
@@ -212,5 +205,50 @@ export const generateAnswerFromDataDeepSeek = async (originalPrompt: string, dat
     } catch (error) {
         console.error("DeepSeek Answer Generation Error:", error);
         return { answer: "", debug: { prompt: "", response: "" } };
+    }
+};
+
+/**
+ * 从文本中还原原始表格结构 (DeepSeek 版)
+ */
+export const restoreRawTable = async (content: string): Promise<any[]> => {
+    if (!config.ai.deepseekKey) throw new Error("缺少 API Key");
+
+    const options: any = {
+        baseURL: config.ai.deepseekUrl,
+        apiKey: config.ai.deepseekKey
+    };
+    if (config.proxy) options.httpAgent = new HttpsProxyAgent(config.proxy);
+
+    const openai = new OpenAI(options);
+
+    const messages = [
+        { role: "system", content: RESTORE_RAW_TABLE_INSTRUCTION },
+        { role: "user", content: `请将以下文本还原为原始表格结构：\n\n${content}` }
+    ];
+
+    try {
+        const completion = await openai.chat.completions.create({
+            messages: messages as any,
+            model: "deepseek-chat",
+            temperature: 0.1,
+            response_format: { type: 'json_object' }
+        });
+
+        const resultText = completion.choices[0].message.content || "[]";
+        let data: any;
+        try {
+            const parsed = JSON.parse(resultText);
+            data = Array.isArray(parsed) ? parsed : (parsed.items || [parsed]);
+        } catch (e) {
+            console.error("DeepSeek JSON Parse Error", e);
+            return [];
+        }
+
+        console.log(`[DeepSeek Restore] Table restored with ${data.length} rows`);
+        return data;
+    } catch (error) {
+        console.error("DeepSeek Restore Error:", error);
+        throw error;
     }
 };

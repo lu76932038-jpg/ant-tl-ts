@@ -115,7 +115,7 @@ router.post('/upload', authenticate, upload.single('file'), async (req: any, res
                 notifyTaskUpdate(userId, {
                     id: taskId,
                     status: 'completed',
-                    result: result.parsedResult,
+                    parsed_result: result.parsedResult,
                     raw_content: result.rawContent,
                     process_logs: result.logs,
                     completed_at: new Date()
@@ -166,7 +166,14 @@ router.post('/upload', authenticate, upload.single('file'), async (req: any, res
 router.get('/', authenticate, async (req: any, res) => {
     try {
         const userId = req.user.id;
-        const tasks = await InquiryTaskModel.findByUserId(userId);
+        let tasks;
+
+        if (req.user.role === 'admin') {
+            tasks = await InquiryTaskModel.findAll();
+        } else {
+            tasks = await InquiryTaskModel.findByUserId(userId);
+        }
+
         res.json(tasks);
     } catch (error) {
         console.error('List Tasks Error:', error);
@@ -228,14 +235,35 @@ router.get('/:id/download/result', authenticate, async (req: any, res) => {
             return res.status(400).json({ error: 'No parsed result available to download' });
         }
 
+        // Map English keys to STRICT Chinese headers and order according to ID0020
+        const mappedResult = task.parsed_result.map((item: any) => ({
+            '询价类型': item.inquiryType || '',
+            '品牌': item.brand || '',
+            '产品名称': item.productName || '',
+            '询价型号': item.model || '',
+            '数量': item.quantity || '',
+            '物料单位': item.unit || '',
+            '询价备注': item.remarks || '',
+            '是否带图纸': item.hasDrawing || '',
+            '客户物料编码': item.customerMaterialCode || '',
+            '目标价格': item.targetPrice || '',
+            '参考货期': item.referenceLeadTime || '',
+            '期望交期(年-月-日)': item.expectedDeliveryDate || '',
+            '预计年用量': item.estimatedAnnualUsage || '',
+            '客户订单号': item.customerOrderNumber || '',
+            '客户项目号': item.customerProjectNumber || ''
+        }));
+
         // Convert JSON to Excel
-        const worksheet = xlsx.utils.json_to_sheet(task.parsed_result);
+        const worksheet = xlsx.utils.json_to_sheet(mappedResult);
         const workbook = xlsx.utils.book_new();
-        xlsx.utils.book_append_sheet(workbook, worksheet, "Parsed Result");
+        xlsx.utils.book_append_sheet(workbook, worksheet, "AI 解析结果");
 
         const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
-        res.setHeader('Content-Disposition', `attachment; filename="inquiry_AI_result_${task.id}.xlsx"`);
+        const safeFileName = task.file_name.replace(/\.[^/.]+$/, "");
+        const encodedFileName = encodeURIComponent(`AI_Matched_Result_${safeFileName}.xlsx`);
+        res.setHeader('Content-Disposition', `attachment; filename="${encodedFileName}"; filename*=UTF-8''${encodedFileName}`);
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.send(buffer);
 
@@ -263,11 +291,13 @@ router.get('/:id/download/extracted', authenticate, async (req: any, res) => {
         // Convert raw JSON to Excel
         const worksheet = xlsx.utils.json_to_sheet(task.raw_content);
         const workbook = xlsx.utils.book_new();
-        xlsx.utils.book_append_sheet(workbook, worksheet, "Extracted Content");
+        xlsx.utils.book_append_sheet(workbook, worksheet, "Original Extraction");
 
         const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
-        res.setHeader('Content-Disposition', `attachment; filename="inquiry_extracted_${task.id}.xlsx"`);
+        const safeFileName = task.file_name.replace(/\.[^/.]+$/, "");
+        const encodedFileName = encodeURIComponent(`Original_Extraction_${safeFileName}.xlsx`);
+        res.setHeader('Content-Disposition', `attachment; filename="${encodedFileName}"; filename*=UTF-8''${encodedFileName}`);
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.send(buffer);
     } catch (error) {
@@ -327,22 +357,46 @@ router.post('/download/merge', authenticate, async (req: any, res) => {
     }
 });
 
+import { AuditLogModel } from '../models/AuditLog';
+import { UserModel } from '../models/User';
+
 // PUT /api/inquiry/:id/share
 router.put('/:id/share', authenticate, async (req: any, res) => {
     try {
-        const { sharedWith } = req.body; // Array of user IDs
-        if (!Array.isArray(sharedWith)) return res.status(400).json({ error: 'Invalid data' });
+        const { usernames } = req.body;
+        if (!Array.isArray(usernames)) return res.status(400).json({ error: 'Invalid data' });
 
         const task = await InquiryTaskModel.findById(req.params.id);
         if (!task) return res.status(404).json({ error: 'Task not found' });
 
-        if (task.user_id !== req.user.id) {
+        if (task.user_id !== req.user.id && req.user.role !== 'admin') {
             return res.status(403).json({ error: 'Only owner can share' });
         }
 
-        await InquiryTaskModel.updateSharedWith(req.params.id, sharedWith);
-        res.json({ success: true });
+        const userIds: number[] = [];
+        for (const username of usernames) {
+            const trimmedName = username.trim();
+            if (!trimmedName) continue;
+            const user = await UserModel.findByUsername(trimmedName);
+            if (user) userIds.push(user.id);
+        }
+
+        await InquiryTaskModel.updateSharedWith(req.params.id, userIds);
+
+        // 记录审计日志
+        AuditLogModel.create({
+            user_id: req.user.id,
+            action: 'SHARE_TASK',
+            file_name: task.file_name,
+            raw_content_preview: `Shared with: ${usernames.join(', ')}`,
+            masked_content_preview: `TaskID: ${task.id}`,
+            ai_model: 'SYSTEM',
+            status: 'success'
+        }).catch(err => console.error('AuditLog Error:', err));
+
+        res.json({ success: true, sharedCount: userIds.length });
     } catch (error) {
+        console.error('Share Error:', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -360,6 +414,18 @@ router.put('/:id/feedback', authenticate, async (req: any, res) => {
         }
 
         await InquiryTaskModel.updateFeedback(req.params.id, rating, comment);
+
+        // 记录审计日志
+        AuditLogModel.create({
+            user_id: req.user.id,
+            action: 'SUBMIT_FEEDBACK',
+            file_name: task.file_name,
+            raw_content_preview: `Rating: ${rating}`,
+            masked_content_preview: `Comment: ${comment}`,
+            ai_model: 'SYSTEM',
+            status: 'success'
+        }).catch(err => console.error('AuditLog Error:', err));
+
         res.json({ success: true });
     } catch (error) {
         console.error('Update Feedback Error:', error);
@@ -373,7 +439,7 @@ router.put('/:id/terminate', authenticate, async (req: any, res) => {
         const task = await InquiryTaskModel.findById(req.params.id);
         if (!task) return res.status(404).json({ error: 'Task not found' });
 
-        if (task.user_id !== req.user.id) {
+        if (task.user_id !== req.user.id && req.user.role !== 'admin') {
             return res.status(403).json({ error: 'Permission denied' });
         }
 
@@ -382,6 +448,17 @@ router.put('/:id/terminate', authenticate, async (req: any, res) => {
         }
 
         await InquiryTaskModel.updateStatus(req.params.id, 'terminated');
+
+        // 记录审计日志
+        AuditLogModel.create({
+            user_id: req.user.id,
+            action: 'TERMINATE_TASK',
+            file_name: task.file_name,
+            raw_content_preview: 'Manual termination',
+            masked_content_preview: `TaskID: ${task.id}`,
+            ai_model: 'SYSTEM',
+            status: 'success'
+        }).catch(err => console.error('AuditLog Error:', err));
 
         notifyTaskUpdate(req.user.id, {
             id: req.params.id,
