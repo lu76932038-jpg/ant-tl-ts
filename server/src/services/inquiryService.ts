@@ -91,6 +91,12 @@ export const parseInquiryFile = async (filePath: string, fileName: string, onPro
 
         // 调用 DeepSeek 进行深度解析（标准化）
         addLog('AI分析', `正在通过 DeepSeek 模型进行智能匹配与标准化...`, 'info', { model: 'DeepSeek-V3' });
+
+        // 关键点：AI 调用前再次触发一次回调，确保路由层有机会检查 Terminated 状态并抛出异常中止
+        if (onProgress) {
+            await onProgress({ rawContent: extractedData, logs });
+        }
+
         const { data: parsedResult, debug } = await extractDataDeepSeek(extractedText);
         addLog('AI分析', `分析完成，识别到 ${parsedResult?.length || 0} 条标准化询价项`, 'success', {
             aiPrompt: debug.prompt,

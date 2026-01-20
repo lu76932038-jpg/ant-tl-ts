@@ -127,6 +127,13 @@ router.post('/upload', authenticate, upload.single('file'), async (req: any, res
                     return;
                 }
 
+                // 再次检查是否在过程中国状态已变为终止，防止后续逻辑通过消息推送覆盖状态
+                const checkTask = await InquiryTaskModel.findById(taskId);
+                if (checkTask?.status === 'terminated') {
+                    console.log(`捕获到解析异常，但任务已被用户手动终止，跳过错误处理: ${taskId}`);
+                    return;
+                }
+
                 console.error(`后台解析任务失败: ${taskId}`, err);
                 const errorMsg = err.error?.message || err.message || '未知错误';
                 const errorLogs = err.logs || currentLogs;
@@ -444,7 +451,13 @@ router.put('/:id/terminate', authenticate, async (req: any, res) => {
         }
 
         if (task.status !== 'pending') {
-            return res.status(400).json({ error: 'Only pending tasks can be terminated' });
+            // 如果任务已经不是 pending（比如已经极速完成或失败了），直接返回成功
+            // 避免前端报错，因为这种情况下“停止”的目的已经达到了
+            return res.json({
+                success: true,
+                message: 'Task already processed',
+                currentStatus: task.status
+            });
         }
 
         await InquiryTaskModel.updateStatus(req.params.id, 'terminated');

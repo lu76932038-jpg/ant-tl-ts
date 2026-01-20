@@ -196,18 +196,18 @@ export class InquiryTaskModel {
         );
     }
 
-    // Update status and result
+    // Update status and result - only if currently pending
     static async updateResult(id: string, status: 'completed' | 'failed' | 'terminated', result: any, errorMessage?: string, processLogs?: any): Promise<void> {
         await pool.execute(
-            'UPDATE inquiry_tasks SET status = ?, parsed_result = ?, error_message = ?, process_logs = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?',
+            'UPDATE inquiry_tasks SET status = ?, parsed_result = ?, error_message = ?, process_logs = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ? AND status = \'pending\'',
             [status, JSON.stringify(result), errorMessage || null, JSON.stringify(processLogs || []), id]
         );
     }
 
-    // Update raw content (used after OCR/Excel extraction but before AI)
+    // Update raw content - only if currently pending
     static async updateRawContent(id: string, rawContent: any, processLogs?: any): Promise<void> {
         await pool.execute(
-            'UPDATE inquiry_tasks SET raw_content = ?, process_logs = ? WHERE id = ?',
+            'UPDATE inquiry_tasks SET raw_content = ?, process_logs = ? WHERE id = ? AND status = \'pending\'',
             [JSON.stringify(rawContent), JSON.stringify(processLogs || []), id]
         );
     }

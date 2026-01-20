@@ -100,11 +100,11 @@ const UploadDrawer: React.FC<UploadDrawerProps> = ({ isOpen, onClose, onUploadCo
             console.log('文件上传成功，taskId:', response.taskId);
 
             // 第二阶段：提示用户已转入后台
-            // 既然物理上传已经到 100%，我们可以稍微停顿，展示“已转入后台解析”
             setUploadProgress(100);
 
-            // 通知父组件刷新列表（此时列表中会出现 pending 状态的任务）
-            onUploadComplete();
+            // 修改点：不再每次成功都回调通知列表刷新，减少请求频率
+            // onUploadComplete();
+            return response.task; // 返回任务数据以便最后统一处理
 
         } catch (error: any) {
             console.error('上传失败:', error);
@@ -131,10 +131,30 @@ const UploadDrawer: React.FC<UploadDrawerProps> = ({ isOpen, onClose, onUploadCo
     // 确认合规后上传
     const handleConfirmCompliance = async () => {
         setShowCompliance(false);
+        const uploadedTasks = [];
+        let hasError = false;
+
         for (const file of pendingFiles) {
-            await handleProcessFile(file);
+            try {
+                const task = await handleProcessFile(file);
+                if (task) uploadedTasks.push(task);
+            } catch (error: any) {
+                hasError = true;
+                // 核心点：如果遇到 429 限流，立即熔断，不再尝试后续文件
+                if (error?.response?.status === 429 || error?.message?.includes('429')) {
+                    alert('检测到操作频繁，为保护系统稳定，已中止后续文件上传。请 5 秒后再试。');
+                    break;
+                }
+            }
         }
+
         setPendingFiles([]);
+
+        // 终极加固：仅在全部结束后，根据上传成功的任务进行一次性增量更新
+        if (uploadedTasks.length > 0) {
+            // 这里可以传入已上传的任务列表，让父组件一次性插入
+            (onUploadComplete as any)({ tasks: uploadedTasks });
+        }
     };
 
     return (

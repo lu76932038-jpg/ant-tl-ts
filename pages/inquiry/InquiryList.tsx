@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Download, FileText, Share2, RotateCw, File, CheckCircle2, CircleX, LoaderCircle, Plus, LayoutGrid, ThumbsUp, ThumbsDown, ChevronUp, ChevronDown, FileSpreadsheet, FileCode, ImageIcon, CircleOff, Clock, HelpCircle, MessageSquare } from 'lucide-react';
 import { api } from '../../services/api';
 import { InquiryTask } from '../../types';
@@ -12,6 +12,10 @@ const InquiryList: React.FC = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
     const [tasks, setTasks] = useState<InquiryTask[]>([]);
+    const isFetchingRef = React.useRef(false); // 增加列表刷新锁
+    const isActionPendingRef = React.useRef(false); // 增加手动操作锁（Terminate/Share等）
+    const lastFetchTimeRef = React.useRef(0); // 强制请求时间间隔锁（节流）
+    const errorCircuitBreakerRef = React.useRef(0); // 429 熔断计时器
     const [loading, setLoading] = useState(true);
     const [selectedTask, setSelectedTask] = useState<InquiryTask | null>(null);
     const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -27,11 +31,12 @@ const InquiryList: React.FC = () => {
     });
 
     // 搜索与过滤状态
+    const location = useLocation();
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string | null>(null);
     const [startDate, setStartDate] = useState<string>(() => {
         const d = new Date();
-        d.setDate(d.getDate() - 3);
+        d.setDate(d.getDate() - 30); // 默认查询范围从 3 天延长至 30 天，防止用户产生的“数据丢失”错觉
         return d.toISOString().split('T')[0];
     });
     const [endDate, setEndDate] = useState<string>('');
@@ -46,45 +51,71 @@ const InquiryList: React.FC = () => {
         return () => clearInterval(timer);
     }, []);
 
+    // 监听路由路径变化，如果是从导航菜单点击进入，重置过滤状态
+    useEffect(() => {
+        if (location.pathname === '/' || location.pathname === '/inquiry-history') {
+            const params = new URLSearchParams(location.search);
+            const status = params.get('status');
+            if (status) {
+                setStatusFilter(status);
+            } else {
+                // 如果是从侧边栏点击或直接访问路径（且没有状态参数），重置过滤
+                // 解决用户反馈的“页面切换后数据查不到”问题（通常是因为保留了之前的 pending 过滤状态）
+                setStatusFilter(null);
+                setSearchTerm('');
+            }
+        }
+    }, [location.pathname, location.search]);
+
     useEffect(() => {
         fetchTasks();
 
-        // WebSocket 实时监听配置优化
-        const getSocketPath = () => {
-            const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
-            if (baseUrl.startsWith('http')) {
-                try {
-                    const url = new URL(baseUrl);
-                    return url.pathname === '/' ? '/socket.io' : `${url.pathname.replace(/\/$/, '')}/socket.io`;
-                } catch {
-                    return '/socket.io';
-                }
-            }
-            return baseUrl ? `${baseUrl.replace(/\/$/, '')}/socket.io` : '/socket.io';
-        };
-
-        const socket = io(import.meta.env.VITE_API_BASE_URL || '/', {
-            path: getSocketPath(),
-            transports: ['websocket', 'polling'],
+        // WebSocket 实时监听优化 (使用相对路径利用 Vite/Nginx 代理)
+        const socket = io('/', {
+            path: '/socket.io',
+            // 先尝试 polling 建立稳定连接，然后再尝试升级到 websocket
+            // 这样可以消除“WebSocket connection failed”的初始黄色警告
+            transports: ['polling', 'websocket'],
             autoConnect: true,
-            reconnectionAttempts: 5
+            reconnectionAttempts: 20,
+            reconnectionDelay: 2000
         });
 
-        if (user) {
-            socket.emit('join', user.id);
-            if (user.role === 'admin') {
-                socket.emit('join_admin');
+        socket.on('connect', () => {
+            console.log('%c[Socket] 已建立实时通信连接', 'color: #10b981; font-weight: bold');
+            if (user) {
+                socket.emit('join', user.id);
+                if (user.role === 'admin') socket.emit('join_admin');
             }
-        }
+        });
+
+        socket.on('connect_error', (error) => {
+            console.warn('[Socket] 连接波动，系统将自动降级为轮询模式:', error.message);
+        });
 
         socket.on('task_updated', (data) => {
-            fetchTasks(true);
+            console.log('[Socket] 收到任务更新推送:', data.id, data.status);
+            // 改为增量更新状态，不再触发全量列表请求，从根本上解决 429 问题
+            setTasks(prevTasks => {
+                const index = prevTasks.findIndex(t => t.id === data.id);
+                if (index === -1) {
+                    // 如果是新任务（例如在其他设备上传的），则需要刷新列表
+                    // 但为了安全，这里我们先不处理，等用户手动刷新或下次进入
+                    return prevTasks;
+                }
+                const newTasks = [...prevTasks];
+                newTasks[index] = { ...newTasks[index], ...data };
+                return newTasks;
+            });
         });
 
         return () => {
             socket.disconnect();
         };
     }, [user]);
+
+    // 已移除自动轮询机制，完全依赖 WebSocket 实时推送以彻底杜绝 429 报错。
+    // 如果 WebSocket 断开，用户可以通过手动刷新按钮进行拉取。
 
     const formatDate = (date: string | Date | undefined) => {
         if (!date) return '-';
@@ -124,7 +155,8 @@ const InquiryList: React.FC = () => {
                 rating: rating,
                 comment: task.comment
             });
-            fetchTasks();
+            // 评价后改为增量更新本地状态，不再刷新全量列表
+            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, rating } : t));
         } catch (error) {
             console.error('Rating failed', error);
         }
@@ -186,13 +218,29 @@ const InquiryList: React.FC = () => {
     const paginatedTasks = sortedTasks.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
     const fetchTasks = async (silent = false) => {
-        if (!silent) setLoading(true);
+        if (isFetchingRef.current) return;
+
+        // 终极加固 1: 强制请求节流，2秒内只允许一次全量拉取
+        const nowTime = Date.now();
+        if (nowTime - lastFetchTimeRef.current < 2000) return;
+
+        // 终极加固 2: 熔断检查，如果处于 429 静默期，拦截请求
+        if (nowTime < errorCircuitBreakerRef.current) return;
+
         try {
+            isFetchingRef.current = true;
+            lastFetchTimeRef.current = nowTime;
+            if (!silent) setLoading(true);
             const response = await api.get('/inquiry');
             setTasks(response);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to fetch tasks', error);
+            // 终极加固 3: 识别 429 并开启长效熔断
+            if (error?.response?.status === 429 || error?.message?.includes('429')) {
+                errorCircuitBreakerRef.current = Date.now() + 30000; // 进入 30 秒静默期，彻底平息服务器压力
+            }
         } finally {
+            isFetchingRef.current = false;
             if (!silent) setLoading(false);
         }
     };
@@ -286,11 +334,24 @@ const InquiryList: React.FC = () => {
 
     const handleTerminate = async (task: InquiryTask) => {
         if (!confirm('确定要终止该解析任务吗？')) return;
+        if (isActionPendingRef.current) return;
+
         try {
-            await api.put(`/inquiry/${task.id}/terminate`);
-            fetchTasks();
-        } catch (error) {
+            isActionPendingRef.current = true;
+            // 乐观更新：立即在界面上将状态改为已终止，提供即时反馈
+            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'terminated' } : t));
+        } catch (error: any) {
             console.error('Terminate failed', error);
+            // 终极加固 4: 如果发生 429，开启长效熔断
+            if (error?.response?.status === 429 || error?.message?.includes('429')) {
+                errorCircuitBreakerRef.current = Date.now() + 30000;
+                alert('系统负载过高，已自动开启安全静默保护（30秒内禁止操作），请稍后再试。');
+            } else {
+                alert('终止任务失败，请检查网络或重试');
+                // 注意：彻底移除了 fetchTasks() 补偿调用，防止雪崩
+            }
+        } finally {
+            isActionPendingRef.current = false;
         }
     };
 
@@ -746,9 +807,17 @@ const InquiryList: React.FC = () => {
                 <UploadDrawer
                     isOpen={uploadDrawerOpen}
                     onClose={() => setUploadDrawerOpen(false)}
-                    onUploadComplete={() => {
+                    onUploadComplete={(data) => {
                         setUploadDrawerOpen(false);
-                        fetchTasks();
+                        // 终极加固：支持批量增量更新，杜绝上传后的全量刷新
+                        if (data && data.tasks && Array.isArray(data.tasks)) {
+                            setTasks(prev => [...data.tasks, ...prev]);
+                        } else if (data && data.task) {
+                            setTasks(prev => [data.task, ...prev]);
+                        } else {
+                            // 兜底：仅在无数据时尝试刷新，但也受 fetchTasks 内的时间锁保护
+                            fetchTasks();
+                        }
                     }}
                 />
 
