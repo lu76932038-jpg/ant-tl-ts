@@ -70,15 +70,16 @@ const InquiryList: React.FC = () => {
     useEffect(() => {
         fetchTasks();
 
-        // WebSocket 实时监听优化 (使用相对路径利用 Vite/Nginx 代理)
+        // WebSocket 实时监听优化 (加固：携带 Token 进行鉴权)
         const socket = io('/', {
             path: '/socket.io',
-            // 先尝试 polling 建立稳定连接，然后再尝试升级到 websocket
-            // 这样可以消除“WebSocket connection failed”的初始黄色警告
             transports: ['polling', 'websocket'],
             autoConnect: true,
             reconnectionAttempts: 20,
-            reconnectionDelay: 2000
+            reconnectionDelay: 2000,
+            auth: {
+                token: localStorage.getItem('token')
+            }
         });
 
         socket.on('connect', () => {
@@ -90,7 +91,7 @@ const InquiryList: React.FC = () => {
         });
 
         socket.on('connect_error', (error) => {
-            console.warn('[Socket] 连接波动，系统将自动降级为轮询模式:', error.message);
+            console.warn('[Socket] 实时链路连接受限（请检查网络或重新登录）:', error.message);
         });
 
         socket.on('task_updated', (data) => {

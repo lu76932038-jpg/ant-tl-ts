@@ -1,5 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HttpServer } from 'http';
+import jwt from 'jsonwebtoken';
 
 let io: SocketIOServer;
 
@@ -8,6 +9,25 @@ export const initSocket = (server: HttpServer) => {
         cors: {
             origin: "*", // 在生产环境中应更严格
             methods: ["GET", "POST"]
+        }
+    });
+
+    // 关键加固：Socket.io 鉴权中间件
+    io.use((socket, next) => {
+        const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '');
+
+        if (!token) {
+            console.error('[Socket] 拒绝未携带 Token 的连接尝试');
+            return next(new Error('Authentication error: Token missing'));
+        }
+
+        try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number };
+            (socket as any).userId = decoded.userId;
+            next();
+        } catch (err) {
+            console.error('[Socket] 拒绝无效的 JWT 连接:', err instanceof Error ? err.message : 'Unknown error');
+            next(new Error('Authentication error: Invalid token'));
         }
     });
 
