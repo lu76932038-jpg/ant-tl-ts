@@ -34,10 +34,10 @@ async function runTest() {
         const result = await extractDeepSeek(MOCK_EXCEL_JSON);
         console.log("解析结果:", JSON.stringify(result, null, 2));
 
-        if (result.length === 0) {
+        if (result.data.length === 0) {
             console.error("FAIL: Result is empty");
         } else {
-            console.log("SUCCESS: Parsed", result.length, "items");
+            console.log("SUCCESS: Parsed", result.data.length, "items");
         }
     } catch (error) {
         console.error("FAIL: Error during parsing", error);

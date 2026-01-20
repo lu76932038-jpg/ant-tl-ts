@@ -5,7 +5,12 @@ import jwt from 'jsonwebtoken';
 let io: SocketIOServer;
 
 export const initSocket = (server: HttpServer) => {
+    // 支持通过环境变量配置 Socket 路径，以适配子路径部署（如 /ant-tool/socket.io）
+    const socketPath = process.env.SOCKET_PATH || '/socket.io';
+    console.log(`[Socket] 初始化成功，监听路径: ${socketPath}`);
+
     io = new SocketIOServer(server, {
+        path: socketPath,
         cors: {
             origin: "*", // 在生产环境中应更严格
             methods: ["GET", "POST"]

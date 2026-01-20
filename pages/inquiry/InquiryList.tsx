@@ -346,6 +346,8 @@ const InquiryList: React.FC = () => {
             isActionPendingRef.current = true;
             // 乐观更新：立即在界面上将状态改为已终止，提供即时反馈
             setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'terminated' } : t));
+
+            await api.put(`/inquiry/${task.id}/terminate`);
         } catch (error: any) {
             console.error('Terminate failed', error);
             // 终极加固 4: 如果发生 429，开启长效熔断
@@ -789,15 +791,71 @@ const InquiryList: React.FC = () => {
                                 上一页
                             </button>
                             <div className="flex items-center gap-1 px-2">
-                                {[...Array(totalPages)].map((_, i) => (
-                                    <button
-                                        key={i}
-                                        onClick={() => setCurrentPage(i + 1)}
-                                        className={`w-10 h-10 rounded-xl font-black text-xs transition-all ${currentPage === i + 1 ? 'bg-blue-500 text-white shadow-lg shadow-blue-200' : 'bg-white text-slate-400 border border-slate-100 hover:border-slate-200'}`}
-                                    >
-                                        {i + 1}
-                                    </button>
-                                ))}
+                                {(() => {
+                                    const pages = [];
+                                    // 智能分页逻辑：始终包含第一页、最后一页、和当前页附近的页码
+                                    // 格式示例: 1 ... 4 5 6 ... 20
+
+                                    // 场景 1: 总页数较少（小于等于 7 页），全部显示
+                                    if (totalPages <= 7) {
+                                        for (let i = 1; i <= totalPages; i++) {
+                                            pages.push(i);
+                                        }
+                                    } else {
+                                        // 始终添加第一页
+                                        pages.push(1);
+
+                                        if (currentPage > 4) {
+                                            pages.push('...');
+                                        }
+
+                                        // 核心区间：当前页的前后各 1 页
+                                        let start = Math.max(2, currentPage - 1);
+                                        let end = Math.min(totalPages - 1, currentPage + 1);
+
+                                        // 修正边缘情况：如果当前页接近开头或结尾，保持中间至少显示 3 个数字以保持美观
+                                        if (currentPage < 4) {
+                                            end = Math.max(end, 4); // 确保 1 ... 2 3 4 ... end
+                                            start = 2;              // 虽然上面 Math.max 已经处理，显式一些
+                                        }
+                                        if (currentPage > totalPages - 3) {
+                                            start = Math.min(start, totalPages - 3);
+                                        }
+
+                                        for (let i = start; i <= end; i++) {
+                                            pages.push(i);
+                                        }
+
+                                        if (currentPage < totalPages - 3) {
+                                            pages.push('...');
+                                        }
+
+                                        // 始终添加最后一页
+                                        if (totalPages > 1) {
+                                            pages.push(totalPages);
+                                        }
+                                    }
+
+                                    return pages.map((page, index) => {
+                                        if (page === '...') {
+                                            return (
+                                                <span key={`ellipsis-${index}`} className="w-10 h-10 flex items-center justify-center text-slate-300 font-bold">
+                                                    ...
+                                                </span>
+                                            );
+                                        }
+                                        const pageNum = page as number;
+                                        return (
+                                            <button
+                                                key={pageNum}
+                                                onClick={() => setCurrentPage(pageNum)}
+                                                className={`w-10 h-10 rounded-xl font-black text-xs transition-all ${currentPage === pageNum ? 'bg-blue-500 text-white shadow-lg shadow-blue-200' : 'bg-white text-slate-400 border border-slate-100 hover:border-slate-200'}`}
+                                            >
+                                                {pageNum}
+                                            </button>
+                                        );
+                                    });
+                                })()}
                             </div>
                             <button
                                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
