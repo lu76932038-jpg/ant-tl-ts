@@ -17,17 +17,23 @@ export const initSocket = (server: HttpServer) => {
         const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '');
 
         if (!token) {
-            console.error('[Socket] 拒绝未携带 Token 的连接尝试');
+            console.warn('[Socket Auth] 拒绝连接: 缺少 Token');
             return next(new Error('Authentication error: Token missing'));
         }
 
         try {
-            const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: number };
+            const secret = process.env.JWT_SECRET;
+            if (!secret) {
+                console.error('[Socket Auth] 关键错误: JWT_SECRET 环境变量未配置！');
+                return next(new Error('Authentication error: Server internal error'));
+            }
+            const decoded = jwt.verify(token, secret) as { userId: number };
             (socket as any).userId = decoded.userId;
             next();
         } catch (err) {
-            console.error('[Socket] 拒绝无效的 JWT 连接:', err instanceof Error ? err.message : 'Unknown error');
-            next(new Error('Authentication error: Invalid token'));
+            const msg = err instanceof Error ? err.message : 'Unknown error';
+            console.error('[Socket Auth] 拒绝无效连接:', msg);
+            next(new Error(`Authentication error: ${msg}`));
         }
     });
 

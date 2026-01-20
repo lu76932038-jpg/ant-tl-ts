@@ -24,9 +24,7 @@ const Login: React.FC = () => {
     const { login } = useAuth();
     const navigate = useNavigate();
 
-    // Debugging environment variables
-    console.log('Vite Env:', import.meta.env);
-    console.log('App Version:', import.meta.env.VITE_APP_VERSION);
+
 
     const handleSendCode = async () => {
         if (!email) {

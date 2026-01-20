@@ -70,9 +70,14 @@ const InquiryList: React.FC = () => {
     useEffect(() => {
         fetchTasks();
 
-        // WebSocket 实时监听优化 (加固：携带 Token 进行鉴权)
+        // WebSocket 实时监听优化 (加固：支持子路径部署，携带 Token 进行鉴权)
+        const socketBase = import.meta.env.BASE_URL.replace(/\/$/, '');
+        const socketPath = `${socketBase}/socket.io`;
+
+        console.log('[Socket] 初始化连接，路径:', socketPath);
+
         const socket = io('/', {
-            path: '/socket.io',
+            path: socketPath,
             transports: ['polling', 'websocket'],
             autoConnect: true,
             reconnectionAttempts: 20,
