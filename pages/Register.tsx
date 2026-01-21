@@ -165,8 +165,13 @@ const Register: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={handleSendCode}
-                                    disabled={countdown > 0 || !isCaptchaVerified || isSendingCode}
-                                    className="px-4 py-2 bg-slate-800 text-white rounded-2xl text-xs font-bold disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                                    disabled={countdown > 0 || isSendingCode}
+                                    className={`px-4 py-2 rounded-2xl text-xs font-bold transition-colors whitespace-nowrap ${(countdown > 0 || isSendingCode)
+                                            ? 'bg-slate-300 cursor-not-allowed text-white'
+                                            : !isCaptchaVerified
+                                                ? 'bg-slate-500/50 text-white cursor-pointer hover:bg-slate-600'
+                                                : 'bg-slate-800 text-white hover:bg-slate-900'
+                                        }`}
                                 >
                                     {isSendingCode ? '发送中' : (countdown > 0 ? `${countdown}s` : '发送验证码')}
                                 </button>
