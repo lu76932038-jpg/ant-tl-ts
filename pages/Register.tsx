@@ -14,6 +14,7 @@ const Register: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isCodeSent, setIsCodeSent] = useState(false);
     const [isCaptchaVerified, setIsCaptchaVerified] = useState(false);
+    const [isSendingCode, setIsSendingCode] = useState(false);
     const [countdown, setCountdown] = useState(0);
 
     // Auth context now needs to support phone register, or we call API directly 
@@ -31,6 +32,8 @@ const Register: React.FC = () => {
             setError('请先完成人机验证');
             return;
         }
+
+        setIsSendingCode(true);
 
         try {
             const apiBaseUrl = config.apiBaseUrl;
@@ -62,6 +65,8 @@ const Register: React.FC = () => {
             }, 1000);
         } catch (err: any) {
             setError(err.message);
+        } finally {
+            setIsSendingCode(false);
         }
     };
 
@@ -160,10 +165,10 @@ const Register: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={handleSendCode}
-                                    disabled={countdown > 0 || !isCaptchaVerified}
+                                    disabled={countdown > 0 || !isCaptchaVerified || isSendingCode}
                                     className="px-4 py-2 bg-slate-800 text-white rounded-2xl text-xs font-bold disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                                 >
-                                    {countdown > 0 ? `${countdown}s` : '发送验证码'}
+                                    {isSendingCode ? '发送中' : (countdown > 0 ? `${countdown}s` : '发送验证码')}
                                 </button>
                             </div>
 

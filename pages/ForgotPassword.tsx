@@ -8,6 +8,7 @@ const ForgotPassword: React.FC = () => {
     const [code, setCode] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [isCaptchaVerified, setIsCaptchaVerified] = useState(false);
+    const [isSendingCode, setIsSendingCode] = useState(false);
     const [countdown, setCountdown] = useState(0);
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -23,6 +24,8 @@ const ForgotPassword: React.FC = () => {
             setError('请先完成人机验证');
             return;
         }
+
+        setIsSendingCode(true);
 
         try {
             const apiBaseUrl = config.apiBaseUrl;
@@ -52,6 +55,8 @@ const ForgotPassword: React.FC = () => {
             }, 1000);
         } catch (err: any) {
             setError(err.message);
+        } finally {
+            setIsSendingCode(false);
         }
     };
 
@@ -121,10 +126,10 @@ const ForgotPassword: React.FC = () => {
                                 <button
                                     type="button"
                                     onClick={handleSendCode}
-                                    disabled={countdown > 0}
+                                    disabled={countdown > 0 || !isCaptchaVerified || isSendingCode}
                                     className="absolute right-2 top-2 bottom-2 px-4 bg-slate-800 text-white rounded-xl text-xs font-bold disabled:bg-slate-300 disabled:cursor-not-allowed transition-all hover:bg-slate-900 shadow-sm"
                                 >
-                                    {countdown > 0 ? `${countdown}s` : '发送验证码'}
+                                    {isSendingCode ? '发送中' : (countdown > 0 ? `${countdown}s` : '发送验证码')}
                                 </button>
                             </div>
 

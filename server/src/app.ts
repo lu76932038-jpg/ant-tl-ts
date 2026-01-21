@@ -34,6 +34,17 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json({ limit: `${config.upload.maxSizeMB}mb` })); // Support large images or file content
+
+// 路径重写中间件：处理前端可能带有的 /ant-tool 前缀
+app.use((req, res, next) => {
+    if (req.url.startsWith('/ant-tool/')) {
+        req.url = req.url.replace('/ant-tool/', '/');
+    } else if (req.url === '/ant-tool') {
+        req.url = '/';
+    }
+    next();
+});
+
 app.use(express.static(path.join(__dirname, '../public'))); // Serve static UI pages
 
 // 基础限流：每分钟 100 次请求

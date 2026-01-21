@@ -249,7 +249,7 @@ const UploadDrawer: React.FC<UploadDrawerProps> = ({ isOpen, onClose, onUploadCo
                                             <div className="flex items-center gap-1.5 min-w-0 w-full">
                                                 <LoaderCircle className="w-3 h-3 animate-spin shrink-0" />
                                                 <span className="truncate">
-                                                    {`(%{currentFileIndex + 1}/%{pendingFiles.length}) %{currentFileName}`.replace(/%{/g, '{').replace(/}/g, '}')}
+                                                    ({currentFileIndex + 1}/{pendingFiles.length}) {currentFileName}
                                                 </span>
                                             </div>
                                             {uploadProgress < 95 ? (

@@ -5,17 +5,37 @@ import { config } from '../config/env';
 const verificationCodes: Record<string, { code: string; expiresAt: number }> = {};
 
 // Create reusable transporter object using the default SMTP transport
+console.log('EMAIL_SERVICE: Creating transporter with:', {
+    host: config.email.host,
+    port: config.email.port,
+    secure: config.email.port === 465,
+    user: config.email.user
+});
+
 const transporter = nodemailer.createTransport({
     host: config.email.host,
     port: config.email.port,
     secure: config.email.port === 465, // true for 465, false for other ports
+    pool: true, // Use pooled connections
+    maxConnections: 5,
+    maxMessages: 100,
     auth: {
         user: config.email.user,
         pass: config.email.pass,
     },
 });
 
+// Verify connection on startup
+transporter.verify((error, success) => {
+    if (error) {
+        console.error('SMTP Connection Error:', error);
+    } else {
+        console.log('SMTP Server is ready to take our messages');
+    }
+});
+
 export const sendVerificationEmail = async (email: string): Promise<string> => {
+    console.log(`EMAIL_SERVICE: Attempting to send code to ${email}`);
     // Generate a 6-digit random code
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
