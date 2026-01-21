@@ -70,6 +70,8 @@ const UploadDrawer: React.FC<UploadDrawerProps> = ({ isOpen, onClose, onUploadCo
     const [showCompliance, setShowCompliance] = useState(false);
     const [pendingFiles, setPendingFiles] = useState<File[]>([]);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [currentFileIndex, setCurrentFileIndex] = useState(0);
+    const [currentFileName, setCurrentFileName] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // 配置
@@ -77,7 +79,6 @@ const UploadDrawer: React.FC<UploadDrawerProps> = ({ isOpen, onClose, onUploadCo
 
     // 处理单个文件上传
     const handleProcessFile = async (file: File) => {
-        setIsProcessing(true);
         setUploadProgress(0);
 
         try {
@@ -111,7 +112,7 @@ const UploadDrawer: React.FC<UploadDrawerProps> = ({ isOpen, onClose, onUploadCo
             const errorMsg = error.response?.data?.error || error.message || '未知错误';
             alert(`上传失败: ${errorMsg}`);
         } finally {
-            setIsProcessing(false);
+            // setIsProcessing(false) 移至外层 handleConfirmCompliance
             setUploadProgress(0);
         }
     };
@@ -131,6 +132,7 @@ const UploadDrawer: React.FC<UploadDrawerProps> = ({ isOpen, onClose, onUploadCo
     // 确认合规后上传
     const handleConfirmCompliance = async () => {
         setShowCompliance(false);
+        setIsProcessing(true);
         const uploadedTasks = [];
         let hasError = false;
 
@@ -139,6 +141,9 @@ const UploadDrawer: React.FC<UploadDrawerProps> = ({ isOpen, onClose, onUploadCo
 
         for (let i = 0; i < pendingFiles.length; i++) {
             const file = pendingFiles[i];
+            setCurrentFileIndex(i);
+            setCurrentFileName(file.name);
+
             try {
                 const task = await handleProcessFile(file);
                 if (task) uploadedTasks.push(task);
@@ -157,6 +162,7 @@ const UploadDrawer: React.FC<UploadDrawerProps> = ({ isOpen, onClose, onUploadCo
             }
         }
 
+        setIsProcessing(false);
         setPendingFiles([]);
 
         // 终极加固：仅在全部结束后，根据上传成功的任务进行一次性增量更新
@@ -239,21 +245,23 @@ const UploadDrawer: React.FC<UploadDrawerProps> = ({ isOpen, onClose, onUploadCo
                             <div className="w-full mt-4 space-y-2 animate-in fade-in duration-500">
                                 <div className="flex justify-between text-[11px] font-bold uppercase tracking-wider">
                                     <span className="text-blue-600">
-                                        {uploadProgress < 95 ? (
-                                            <span className="flex items-center gap-1.5">
-                                                <LoaderCircle className="w-3 h-3 animate-spin" />
-                                                文件安全上传中...
-                                            </span>
-                                        ) : uploadProgress < 100 ? (
-                                            <span className="flex items-center gap-1.5 text-emerald-600">
-                                                <LoaderCircle className="w-3 h-3 animate-spin" />
-                                                后端 AI 深度解析中...
-                                            </span>
-                                        ) : (
-                                            <span className="text-emerald-600">解析完成！</span>
-                                        )}
+                                        <div className="flex flex-col gap-1 items-start">
+                                            <div className="flex items-center gap-1.5 min-w-0 w-full">
+                                                <LoaderCircle className="w-3 h-3 animate-spin shrink-0" />
+                                                <span className="truncate">
+                                                    {`(%{currentFileIndex + 1}/%{pendingFiles.length}) %{currentFileName}`.replace(/%{/g, '{').replace(/}/g, '}')}
+                                                </span>
+                                            </div>
+                                            {uploadProgress < 95 ? (
+                                                <span className="text-[9px] text-slate-400">正在安全上传至云端...</span>
+                                            ) : uploadProgress < 100 ? (
+                                                <span className="text-[9px] text-emerald-500 font-black">后端 AI 正在深度解析文件结构...</span>
+                                            ) : (
+                                                <span className="text-[9px] text-emerald-500 font-black">该文件处理完成，准备处理下一个...</span>
+                                            )}
+                                        </div>
                                     </span>
-                                    <span className="text-slate-400 font-mono">{uploadProgress}%</span>
+                                    <span className="text-slate-400 font-mono self-start">{uploadProgress}%</span>
                                 </div>
                                 <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                                     <div

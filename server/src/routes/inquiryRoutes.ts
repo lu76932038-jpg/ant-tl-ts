@@ -194,9 +194,10 @@ router.get('/:id', authenticate, async (req: any, res) => {
         const task = await InquiryTaskModel.findById(req.params.id);
         if (!task) return res.status(404).json({ error: 'Task not found' });
 
-        // Check permission
+        // Check permission (Owner, Shared user, or Admin)
         const userId = req.user.id;
-        if (task.user_id !== userId && !task.shared_with.includes(userId)) {
+        const isAdmin = req.user.role === 'admin';
+        if (task.user_id !== userId && !task.shared_with.includes(userId) && !isAdmin) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
@@ -213,7 +214,8 @@ router.get('/:id/download/original', authenticate, async (req: any, res) => {
         if (!task) return res.status(404).json({ error: 'Task not found' });
 
         const userId = req.user.id;
-        if (task.user_id !== userId && !task.shared_with.includes(userId)) {
+        const isAdmin = req.user.role === 'admin';
+        if (task.user_id !== userId && !task.shared_with.includes(userId) && !isAdmin) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
@@ -234,7 +236,8 @@ router.get('/:id/download/result', authenticate, async (req: any, res) => {
         if (!task) return res.status(404).json({ error: 'Task not found' });
 
         const userId = req.user.id;
-        if (task.user_id !== userId && !task.shared_with.includes(userId)) {
+        const isAdmin = req.user.role === 'admin';
+        if (task.user_id !== userId && !task.shared_with.includes(userId) && !isAdmin) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
@@ -287,7 +290,8 @@ router.get('/:id/download/extracted', authenticate, async (req: any, res) => {
         if (!task) return res.status(404).json({ error: 'Task not found' });
 
         const userId = req.user.id;
-        if (task.user_id !== userId && !task.shared_with.includes(userId)) {
+        const isAdmin = req.user.role === 'admin';
+        if (task.user_id !== userId && !task.shared_with.includes(userId) && !isAdmin) {
             return res.status(403).json({ error: 'Access denied' });
         }
 
@@ -332,8 +336,8 @@ router.post('/download/merge', authenticate, async (req: any, res) => {
         for (const id of taskIds) {
             const task = await InquiryTaskModel.findById(id);
             if (task) {
-                // Permission check
-                if (task.user_id === userId || task.shared_with.includes(userId)) {
+                // Permission check (Owner, Shared, or Admin)
+                if (task.user_id === userId || task.shared_with.includes(userId) || req.user.role === 'admin') {
                     if (task.parsed_result && Array.isArray(task.parsed_result)) {
                         // Add source info to each item if needed? Maybe later.
                         mergedData = [...mergedData, ...task.parsed_result];
@@ -416,7 +420,8 @@ router.put('/:id/feedback', authenticate, async (req: any, res) => {
         if (!task) return res.status(404).json({ error: 'Task not found' });
 
         const userId = req.user.id;
-        if (task.user_id !== userId && !task.shared_with.includes(userId)) {
+        const isAdmin = req.user.role === 'admin';
+        if (task.user_id !== userId && !task.shared_with.includes(userId) && !isAdmin) {
             return res.status(403).json({ error: 'Access denied' });
         }
 

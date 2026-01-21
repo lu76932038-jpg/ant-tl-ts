@@ -141,7 +141,7 @@ export class InquiryTaskModel {
              FROM inquiry_tasks it
              LEFT JOIN users u ON it.user_id = u.id
              WHERE it.user_id = ? 
-             OR JSON_CONTAINS(it.shared_with, CAST(? AS CHAR), '$')
+             OR JSON_CONTAINS(it.shared_with, JSON_ARRAY(?), '$')
              ORDER BY it.created_at DESC`,
             [userId, userId]
         );
