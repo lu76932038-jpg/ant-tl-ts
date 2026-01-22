@@ -698,9 +698,9 @@ const InquiryList: React.FC = () => {
                                                     <button
                                                         id="guide-action-more"
                                                         onClick={() => handleTerminate(task)}
-                                                        disabled={task.user_id !== user?.id && user?.role !== 'admin'}
-                                                        className={`p-2 rounded-xl transition-all ${task.user_id === user?.id || user?.role === 'admin' ? 'hover:bg-red-50 text-slate-300 hover:text-red-500' : 'text-slate-100 cursor-not-allowed'}`}
-                                                        title={task.user_id === user?.id || user?.role === 'admin' ? "终止解析" : "仅创建者可终止"}
+                                                        disabled={String(task.user_id) !== String(user?.id) && user?.role !== 'admin'}
+                                                        className={`p-2 rounded-xl transition-all ${String(task.user_id) === String(user?.id) || user?.role === 'admin' ? 'hover:bg-red-50 text-slate-300 hover:text-red-500' : 'text-slate-100 cursor-not-allowed'}`}
+                                                        title={String(task.user_id) === String(user?.id) || user?.role === 'admin' ? "终止解析" : "仅创建者可终止"}
                                                     >
                                                         <CircleX className="w-4 h-4" />
                                                     </button>
@@ -708,9 +708,9 @@ const InquiryList: React.FC = () => {
                                                     <button
                                                         id="guide-action-more"
                                                         onClick={() => openShareModal(task)}
-                                                        disabled={task.user_id !== user?.id && user?.role !== 'admin'}
-                                                        className={`p-2 rounded-xl transition-all ${task.user_id === user?.id || user?.role === 'admin' ? 'hover:bg-white hover:shadow-md text-slate-400 hover:text-blue-500' : 'text-slate-100 cursor-not-allowed'}`}
-                                                        title={task.user_id === user?.id || user?.role === 'admin' ? "分享" : "仅创建者可分享"}
+                                                        disabled={String(task.user_id) !== String(user?.id) && user?.role !== 'admin'}
+                                                        className={`p-2 rounded-xl transition-all ${String(task.user_id) === String(user?.id) || user?.role === 'admin' ? 'hover:bg-white hover:shadow-md text-slate-400 hover:text-blue-500' : 'text-slate-100 cursor-not-allowed'}`}
+                                                        title={String(task.user_id) === String(user?.id) || user?.role === 'admin' ? "分享" : "仅创建者可分享"}
                                                     >
                                                         <Share2 className="w-4 h-4" />
                                                     </button>

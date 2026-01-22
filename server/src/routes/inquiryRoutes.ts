@@ -470,7 +470,7 @@ router.put('/:id/terminate', authenticate, async (req: any, res) => {
         const task = await InquiryTaskModel.findById(req.params.id);
         if (!task) return res.status(404).json({ error: 'Task not found' });
 
-        if (task.user_id !== req.user.id && req.user.role !== 'admin') {
+        if (Number(task.user_id) !== Number(req.user.id) && req.user.role !== 'admin') {
             return res.status(403).json({ error: 'Permission denied' });
         }
 
