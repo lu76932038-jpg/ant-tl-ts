@@ -6,7 +6,7 @@ let io: SocketIOServer;
 
 export const initSocket = (server: HttpServer) => {
     // 强制统一监听 /socket.io 路径，确保与前端一致
-    const socketPath = '/socket.io';
+    const socketPath = process.env.SOCKET_PATH || '/socket.io';
     console.log(`[Socket] 初始化成功，监听路径: ${socketPath}`);
 
     io = new SocketIOServer(server, {

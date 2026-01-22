@@ -72,7 +72,7 @@ const InquiryList: React.FC = () => {
 
         // WebSocket 实时监听优化 (加固：支持子路径部署，携带 Token 进行鉴权)
         // 强制使用 /socket.io 路径，避免路径拼接错误导致的 404
-        const socketPath = '/socket.io';
+        const socketPath = import.meta.env.VITE_SOCKET_PATH || '';
 
         console.log('[Socket] 初始化连接，路径:', socketPath);
 
