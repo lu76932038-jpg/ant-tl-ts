@@ -7,8 +7,8 @@
 ---
 
 **Project:** InventoryMaster v2.0
-**Generated:** 2026-01-21 14:26:05
-**Category:** Logistics/Delivery
+**Generated:** 2026-01-22 11:46:38
+**Category:** Analytics Dashboard
 
 ---
 
@@ -18,13 +18,13 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#3B82F6` | `--color-primary` |
-| Secondary | `#60A5FA` | `--color-secondary` |
+| Primary | `#7C3AED` | `--color-primary` |
+| Secondary | `#A78BFA` | `--color-secondary` |
 | CTA/Accent | `#F97316` | `--color-cta` |
-| Background | `#F8FAFC` | `--color-background` |
-| Text | `#1E293B` | `--color-text` |
+| Background | `#FAF5FF` | `--color-background` |
+| Text | `#4C1D95` | `--color-text` |
 
-**Color Notes:** Blue (#2563EB) + Orange (tracking) + Green (delivered)
+**Color Notes:** Event theme colors + Excitement accents
 
 ### Typography
 
@@ -85,8 +85,8 @@
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #3B82F6;
-  border: 2px solid #3B82F6;
+  color: #7C3AED;
+  border: 2px solid #7C3AED;
   padding: 12px 24px;
   border-radius: 8px;
   font-weight: 600;
@@ -99,7 +99,7 @@
 
 ```css
 .card {
-  background: #F8FAFC;
+  background: #FAF5FF;
   border-radius: 12px;
   padding: 24px;
   box-shadow: var(--shadow-md);
@@ -125,9 +125,9 @@
 }
 
 .input:focus {
-  border-color: #3B82F6;
+  border-color: #7C3AED;
   outline: none;
-  box-shadow: 0 0 0 3px #3B82F620;
+  box-shadow: 0 0 0 3px #7C3AED20;
 }
 ```
 
@@ -153,17 +153,17 @@
 
 ## Style Guidelines
 
-**Style:** Exaggerated Minimalism
+**Style:** Data-Dense Dashboard
 
-**Keywords:** Bold minimalism, oversized typography, high contrast, negative space, loud minimal, statement design
+**Keywords:** Multiple charts/widgets, data tables, KPI cards, minimal padding, grid layout, space-efficient, maximum data visibility
 
-**Best For:** Fashion, architecture, portfolios, agency landing pages, luxury brands, editorial
+**Best For:** Business intelligence dashboards, financial analytics, enterprise reporting, operational dashboards, data warehousing
 
-**Key Effects:** font-size: clamp(3rem 10vw 12rem), font-weight: 900, letter-spacing: -0.05em, massive whitespace
+**Key Effects:** Hover tooltips, chart zoom on click, row highlighting on hover, smooth filter animations, data loading spinners
 
 ### Page Pattern
 
-**Pattern Name:** Feature-Rich Showcase + Real-Time
+**Pattern Name:** Data-Dense + Drill-Down
 
 - **CTA Placement:** Above fold
 - **Section Order:** Hero > Features > CTA
@@ -172,9 +172,8 @@
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Static tracking
-- ❌ No map integration
-- ❌ AI purple/pink gradients
+- ❌ Ornate design
+- ❌ No filtering
 
 ### Additional Forbidden Patterns
 
