@@ -71,20 +71,24 @@ const InquiryList: React.FC = () => {
         fetchTasks();
 
         // WebSocket 实时监听优化 (加固：支持子路径部署，携带 Token 进行鉴权)
-        const socketBase = import.meta.env.BASE_URL.replace(/\/$/, '');
-        const socketPath = `${socketBase}/socket.io`;
+        // 强制使用 /socket.io 路径，避免路径拼接错误导致的 404
+        const socketPath = import.meta.env.VITE_SOCKET_PATH || '/socket.io';
 
         console.log('[Socket] 初始化连接，路径:', socketPath);
 
         const socket = io('/', {
             path: socketPath,
-            transports: ['polling', 'websocket'],
+            transports: ['polling', 'websocket'], // 恢复默认顺序，先 polling 再升级，兼容性更好
             autoConnect: true,
             reconnectionAttempts: 20,
             reconnectionDelay: 2000,
             auth: {
                 token: localStorage.getItem('token')
             }
+        });
+
+        socket.on('connect_error', (err) => {
+            console.error('[Socket] 连接失败详情:', err.message);
         });
 
         socket.on('connect', () => {
@@ -237,7 +241,7 @@ const InquiryList: React.FC = () => {
             isFetchingRef.current = true;
             lastFetchTimeRef.current = nowTime;
             if (!silent) setLoading(true);
-            const response = await api.get('/inquiry');
+            const response = await api.get('/inquiry') as unknown as InquiryTask[];
             setTasks(response);
         } catch (error: any) {
             console.error('Failed to fetch tasks', error);
@@ -295,6 +299,9 @@ const InquiryList: React.FC = () => {
     const handleDownloadOriginal = async (task: InquiryTask) => {
         try {
             const response = await api.get(`/inquiry/${task.id}/download/original`, { responseType: 'blob' });
+            if (window.isSecureContext === false && window.location.protocol !== 'http:') {
+                console.warn('Insecure context detected, download might be blocked');
+            }
             const url = window.URL.createObjectURL(new Blob([response as any]));
             const link = document.createElement('a');
             link.href = url;
@@ -432,6 +439,17 @@ const InquiryList: React.FC = () => {
         }
     ];
 
+    const [stats, setStats] = useState({ userCount: 0, inquiryCount: 0 });
+
+    useEffect(() => {
+        // Fetch stats
+        api.get('/stats/usage').then((res: any) => {
+            setStats(res);
+        }).catch(err => console.error('Failed to fetch stats', err));
+    }, []);
+
+    // ... existing specific useEffects ...
+
     return (
         <div className="flex-1 flex flex-col p-6 max-w-[1600px] mx-auto overflow-hidden w-full min-h-0">
             {/* 顶层区域 (标题 + 筛选) */}
@@ -439,6 +457,15 @@ const InquiryList: React.FC = () => {
                 <div className="flex items-center justify-between px-2 py-4">
                     <div className="flex items-center gap-3">
                         <h1 className="text-2xl font-black text-slate-800 tracking-tight">询价管理 / 询价解析列表</h1>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="hidden md:flex items-center gap-2 px-4 py-1.5 bg-slate-100/50 rounded-full border border-slate-100">
+                            <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider">
+                                已服务 <span className="text-blue-600">{stats.userCount || '-'}</span> 位用户
+                                <span className="mx-2 text-slate-300">|</span>
+                                累计解析 <span className="text-blue-600">{stats.inquiryCount || '-'}</span> 单
+                            </span>
+                        </div>
                         <button
                             onClick={() => { localStorage.removeItem('has_completed_guide_inquiry_list'); window.location.reload(); }}
                             className="group flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-full transition-all"
@@ -674,9 +701,9 @@ const InquiryList: React.FC = () => {
                                                     <button
                                                         id="guide-action-more"
                                                         onClick={() => handleTerminate(task)}
-                                                        disabled={task.user_id !== user?.id && user?.role !== 'admin'}
-                                                        className={`p-2 rounded-xl transition-all ${task.user_id === user?.id || user?.role === 'admin' ? 'hover:bg-red-50 text-slate-300 hover:text-red-500' : 'text-slate-100 cursor-not-allowed'}`}
-                                                        title={task.user_id === user?.id || user?.role === 'admin' ? "终止解析" : "仅创建者可终止"}
+                                                        disabled={String(task.user_id) !== String(user?.id) && user?.role !== 'admin'}
+                                                        className={`p-2 rounded-xl transition-all ${String(task.user_id) === String(user?.id) || user?.role === 'admin' ? 'hover:bg-red-50 text-slate-300 hover:text-red-500' : 'text-slate-300 opacity-50 cursor-not-allowed'}`}
+                                                        title={String(task.user_id) === String(user?.id) || user?.role === 'admin' ? "终止解析" : "仅创建者可终止"}
                                                     >
                                                         <CircleX className="w-4 h-4" />
                                                     </button>
@@ -684,9 +711,9 @@ const InquiryList: React.FC = () => {
                                                     <button
                                                         id="guide-action-more"
                                                         onClick={() => openShareModal(task)}
-                                                        disabled={task.user_id !== user?.id && user?.role !== 'admin'}
-                                                        className={`p-2 rounded-xl transition-all ${task.user_id === user?.id || user?.role === 'admin' ? 'hover:bg-white hover:shadow-md text-slate-400 hover:text-blue-500' : 'text-slate-100 cursor-not-allowed'}`}
-                                                        title={task.user_id === user?.id || user?.role === 'admin' ? "分享" : "仅创建者可分享"}
+                                                        disabled={String(task.user_id) !== String(user?.id) && user?.role !== 'admin'}
+                                                        className={`p-2 rounded-xl transition-all ${String(task.user_id) === String(user?.id) || user?.role === 'admin' ? 'hover:bg-white hover:shadow-md text-slate-400 hover:text-blue-500' : 'text-slate-100 cursor-not-allowed'}`}
+                                                        title={String(task.user_id) === String(user?.id) || user?.role === 'admin' ? "分享" : "仅创建者可分享"}
                                                     >
                                                         <Share2 className="w-4 h-4" />
                                                     </button>

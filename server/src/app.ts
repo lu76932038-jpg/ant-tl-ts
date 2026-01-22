@@ -58,6 +58,10 @@ const inquiryLimiter = rateLimiter(60 * 1000, 50);
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
 });
+
+// 处理 favicon.ico 避免 404
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 app.use('/api/auth', standardLimiter, authRoutes); // 登录注册使用基础限流
 
 // 调试接口 (如有需要)

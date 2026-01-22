@@ -155,6 +155,19 @@ export class InquiryTaskModel {
         return await this.attachSharedWithNames(tasks);
     }
 
+    static async count(filter?: { status?: InquiryTask['status'] }): Promise<number> {
+        let query = 'SELECT COUNT(*) as count FROM inquiry_tasks';
+        const params: any[] = [];
+
+        if (filter?.status) {
+            query += ' WHERE status = ?';
+            params.push(filter.status);
+        }
+
+        const [rows] = await pool.execute<RowDataPacket[]>(query, params);
+        return rows[0].count;
+    }
+
     // Find ALL tasks (Admin only)
     static async findAll(): Promise<InquiryTask[]> {
         const [rows] = await pool.execute<RowDataPacket[]>(

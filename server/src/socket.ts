@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 let io: SocketIOServer;
 
 export const initSocket = (server: HttpServer) => {
-    // 支持通过环境变量配置 Socket 路径，以适配子路径部署（如 /ant-tool/socket.io）
+    // 强制统一监听 /socket.io 路径，确保与前端一致
     const socketPath = process.env.SOCKET_PATH || '/socket.io';
     console.log(`[Socket] 初始化成功，监听路径: ${socketPath}`);
 
