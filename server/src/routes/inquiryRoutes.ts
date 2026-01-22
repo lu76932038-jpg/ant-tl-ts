@@ -350,8 +350,27 @@ router.post('/download/merge', authenticate, async (req: any, res) => {
             return res.status(400).json({ error: 'No valid data found to merge' });
         }
 
+        // Map English keys to STRICT Chinese headers and order according to ID0020
+        const mappedResult = mergedData.map((item: any) => ({
+            '询价类型': item.inquiryType || '',
+            '品牌': item.brand || '',
+            '产品名称': item.productName || '',
+            '询价型号': item.model || '',
+            '数量': item.quantity || '',
+            '物料单位': item.unit || '',
+            '询价备注': item.remarks || '',
+            '是否带图纸': item.hasDrawing || '',
+            '客户物料编码': item.customerMaterialCode || '',
+            '目标价格': item.targetPrice || '',
+            '参考货期': item.referenceLeadTime || '',
+            '期望交期(年-月-日)': item.expectedDeliveryDate || '',
+            '预计年用量': item.estimatedAnnualUsage || '',
+            '客户订单号': item.customerOrderNumber || '',
+            '客户项目号': item.customerProjectNumber || ''
+        }));
+
         // Convert merged JSON to Excel
-        const worksheet = xlsx.utils.json_to_sheet(mergedData);
+        const worksheet = xlsx.utils.json_to_sheet(mappedResult);
         const workbook = xlsx.utils.book_new();
         xlsx.utils.book_append_sheet(workbook, worksheet, "Merged Inquiry Data");
 

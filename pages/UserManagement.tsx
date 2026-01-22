@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Users, Trash2, Shield, Lock, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Users, Trash2, Shield, Lock, Eye, EyeOff, KeyRound, CheckCircle2, AlertCircle, RotateCw, Search, LayoutGrid, LoaderCircle, CircleX } from 'lucide-react';
 import { api } from '../services/api';
 
 interface User {
@@ -21,6 +21,8 @@ const UserManagement: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [showPasswords, setShowPasswords] = useState<Record<number, boolean>>({});
     const { user: currentUser } = useAuth();
+    const [searchTerm, setSearchTerm] = useState('');
+    const [roleFilter, setRoleFilter] = useState<'admin' | 'user' | null>(null);
 
     // Edit Modal State
     const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -128,25 +130,90 @@ const UserManagement: React.FC = () => {
         }
     };
 
+    // Client-side filtering
+    const filteredUsers = users.filter(user => {
+        const matchesSearch = searchTerm === '' ||
+            user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            user.email.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesRole = roleFilter === null || user.role === roleFilter;
+        return matchesSearch && matchesRole;
+    });
+
     return (
-        <div className="flex-1 flex flex-col p-8 max-w-[1400px] mx-auto w-full">
-            <div className="flex items-center justify-between mb-10">
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100">
-                        <Users className="w-6 h-6" />
+        <div className="flex-1 flex flex-col p-6 max-w-[1600px] mx-auto overflow-hidden w-full min-h-0">
+            {/* Top Section */}
+            <div className="flex-none space-y-4 pb-6 px-2">
+                <div className="flex items-center justify-between px-2 py-4">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100">
+                            <Users className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h1 className="text-2xl font-black text-slate-800 tracking-tight">系统管理 / 用户管理</h1>
+                            <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">系统用户权限与安全中心</p>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-black text-slate-800 tracking-tight">用户管理</h1>
-                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">系统用户权限与安全中心</p>
+                    <button
+                        onClick={fetchUsers}
+                        className="p-3 bg-white border border-slate-100 rounded-xl text-slate-400 hover:text-blue-500 hover:border-blue-100 transition-all shadow-sm"
+                        title="刷新数据"
+                    >
+                        <RotateCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+                    </button>
+                </div>
+
+                {/* Filter Bar */}
+                <div className="bg-[#f0f0f0]/50 backdrop-blur-md p-6 rounded-[1.5rem] border border-white shadow-sm">
+                    <div className="flex flex-col md:flex-row items-center gap-4">
+                        {/* Search Input */}
+                        <div className="relative min-w-[240px] w-full md:w-auto">
+                            <input
+                                type="text"
+                                placeholder="搜索用户名或邮箱..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-5 pr-5 py-3 bg-white border border-slate-100 text-sm rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-100/50 shadow-sm transition-all"
+                            />
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                                <Search className="w-4 h-4 text-slate-300" />
+                            </div>
+                        </div>
+
+                        {/* Role Filters */}
+                        <div className="flex items-center gap-2 ml-auto w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+                            {[
+                                { id: null, label: '全部用户', icon: LayoutGrid, color: 'slate', count: users.length },
+                                { id: 'admin', label: '管理员', icon: Shield, color: 'blue', count: users.filter(u => u.role === 'admin').length },
+                                { id: 'user', label: '普通用户', icon: Users, color: 'slate', count: users.filter(u => u.role === 'user').length }
+                            ].map((btn) => (
+                                <button
+                                    key={btn.label}
+                                    onClick={() => setRoleFilter(btn.id as any)}
+                                    title={btn.label}
+                                    className={`flex items-center gap-2 px-3 py-3 rounded-xl transition-all font-black text-sm group shrink-0 whitespace-nowrap
+                                    ${roleFilter === btn.id
+                                            ? 'bg-black text-white shadow-lg'
+                                            : 'bg-white text-slate-400 hover:bg-slate-50 border border-slate-50 shadow-sm'}`}
+                                >
+                                    <btn.icon className={`w-4 h-4 ${roleFilter === btn.id ? 'text-white' : `text-${btn.color}-500`}`} />
+                                    <span>{btn.label}</span>
+                                    <span className={`px-1.5 py-0.5 rounded-md text-[10px] min-w-[20px] text-center ml-1
+                                    ${roleFilter === btn.id ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-400'}`}>
+                                        {btn.count}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200/40 border border-white overflow-hidden">
-                <div className="overflow-x-auto custom-scrollbar">
+            {/* Table Section */}
+            <div className="flex-1 min-h-0 bg-white/70 backdrop-blur-xl rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-white flex flex-col overflow-hidden transition-all duration-500">
+                <div className="flex-1 overflow-auto custom-scrollbar relative">
                     <table className="w-full text-left border-separate border-spacing-0">
-                        <thead>
-                            <tr className="bg-slate-50/50">
+                        <thead className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-sm shadow-sm ring-1 ring-slate-100">
+                            <tr>
                                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">用户名</th>
                                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">角色</th>
                                 <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">权限清单</th>
@@ -162,8 +229,17 @@ const UserManagement: React.FC = () => {
                                         <td colSpan={6} className="px-8 py-8"><div className="h-4 bg-slate-100 rounded w-full"></div></td>
                                     </tr>
                                 ))
-                            ) : users.map((u) => (
-                                <tr key={u.id} className="hover:bg-slate-50/50 transition-all group">
+                            ) : filteredUsers.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="px-8 py-20 text-center">
+                                        <div className="flex flex-col items-center gap-4 text-slate-300">
+                                            <Users className="w-12 h-12 opacity-20" />
+                                            <p className="font-bold">未找到匹配的用户</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : filteredUsers.map((u) => (
+                                <tr key={u.id} className="hover:bg-slate-100/30 transition-all group">
                                     <td className="px-8 py-6">
                                         <div className="flex flex-col">
                                             <span className="text-sm font-black text-slate-800 tracking-tight">{u.username}</span>
@@ -230,6 +306,12 @@ const UserManagement: React.FC = () => {
                         </tbody>
                     </table>
                 </div>
+                {!isLoading && filteredUsers.length > 0 && (
+                    <div className="px-8 py-4 bg-slate-50/50 border-t border-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest flex justify-between items-center">
+                        <span>显示所有用户</span>
+                        <span>共 {filteredUsers.length} 位用户</span>
+                    </div>
+                )}
             </div>
 
             {/* 编辑弹窗 */}
@@ -345,4 +427,3 @@ const UserManagement: React.FC = () => {
 };
 
 export default UserManagement;
-

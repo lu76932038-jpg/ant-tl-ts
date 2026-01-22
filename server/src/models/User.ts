@@ -97,6 +97,11 @@ export class UserModel {
         return user;
     }
 
+    static async count(): Promise<number> {
+        const [rows] = await pool.execute<RowDataPacket[]>('SELECT COUNT(*) as count FROM users');
+        return rows[0].count;
+    }
+
     static async findAll(): Promise<any[]> {
         const [rows] = await pool.execute<RowDataPacket[]>(
             'SELECT id, username, email, phone, role, permissions, raw_password, created_at, updated_at, last_login, is_active FROM users ORDER BY created_at DESC'

@@ -5,7 +5,7 @@ import { api } from '../services/api';
 interface UploadDrawerProps {
     isOpen: boolean;
     onClose: () => void;
-    onUploadComplete: () => void;
+    onUploadComplete: (data?: { task?: any; tasks?: any[] }) => void;
     onUploadProgress?: (progress: number) => void;
 }
 
@@ -168,7 +168,7 @@ const UploadDrawer: React.FC<UploadDrawerProps> = ({ isOpen, onClose, onUploadCo
         // 终极加固：仅在全部结束后，根据上传成功的任务进行一次性增量更新
         if (uploadedTasks.length > 0) {
             // 这里可以传入已上传的任务列表，让父组件一次性插入
-            (onUploadComplete as any)({ tasks: uploadedTasks });
+            onUploadComplete({ tasks: uploadedTasks });
         }
     };
 
