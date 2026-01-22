@@ -72,7 +72,7 @@ const InquiryList: React.FC = () => {
 
         // WebSocket 实时监听优化 (加固：支持子路径部署，携带 Token 进行鉴权)
         // 强制使用 /socket.io 路径，避免路径拼接错误导致的 404
-        const socketPath = import.meta.env.VITE_SOCKET_PATH || '';
+        const socketPath = import.meta.env.VITE_SOCKET_PATH || '/socket.io';
 
         console.log('[Socket] 初始化连接，路径:', socketPath);
 
@@ -299,6 +299,9 @@ const InquiryList: React.FC = () => {
     const handleDownloadOriginal = async (task: InquiryTask) => {
         try {
             const response = await api.get(`/inquiry/${task.id}/download/original`, { responseType: 'blob' });
+            if (window.isSecureContext === false && window.location.protocol !== 'http:') {
+                console.warn('Insecure context detected, download might be blocked');
+            }
             const url = window.URL.createObjectURL(new Blob([response as any]));
             const link = document.createElement('a');
             link.href = url;
