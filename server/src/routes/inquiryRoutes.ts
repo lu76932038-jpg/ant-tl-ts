@@ -159,7 +159,11 @@ router.post('/upload', authenticate, upload.single('file'), async (req: any, res
                 id: taskId,
                 file_name: fileName,
                 status: 'pending',
-                created_at: new Date()
+                created_at: new Date(),
+                user_id: userId,
+                user_name: req.user.username,
+                rating: null,
+                comment: null
             }
         });
 

@@ -6,11 +6,12 @@ import { SecurityService } from '../services/securityService';
 import { AuditLogModel } from '../models/AuditLog';
 import { AuthRequest } from '../middleware/auth';
 import { config } from '../config/env';
+import { Logger } from '../utils/logger';
 
 export const analyzeInquiry = async (req: AuthRequest, res: Response) => {
     const startTime = new Date();
     try {
-        console.log(`[analyzeInquiry] 模型开始解析...`);
+        Logger.info(`[analyzeInquiry] 模型开始解析...`);
         const { content, model = 'deepseek', fileName = 'unknown' } = req.body;
         const userId = req.user?.id || 1;
 
@@ -20,7 +21,7 @@ export const analyzeInquiry = async (req: AuthRequest, res: Response) => {
         }
 
         // --- 校验逻辑开始 ---
-        console.log(`[analyzeInquiry] 文件${fileName}校验逻辑开始...`);
+        Logger.info(`[analyzeInquiry] 文件${fileName}校验逻辑开始...`);
 
         const { maxSizeMB, allowedTypes } = config.upload;
         // 1. 类型校验
@@ -29,7 +30,7 @@ export const analyzeInquiry = async (req: AuthRequest, res: Response) => {
             res.status(400).json({ error: `不支持的文件类型: .${fileExt}。允许: ${allowedTypes.join(', ')}` });
             return;
         }
-        console.log(`[analyzeInquiry] 类型校验通过${fileExt}`);
+        Logger.info(`[analyzeInquiry] 类型校验通过${fileExt}`);
 
 
         // 2. 大小校验 (粗略估算 Base64 大小)
@@ -40,7 +41,7 @@ export const analyzeInquiry = async (req: AuthRequest, res: Response) => {
             res.status(413).json({ error: `文件内容过大，超过限制 (${maxSizeMB}MB)` });
             return;
         }
-        console.log(`[analyzeInquiry] 大小校验通过${maxStringLength}`);
+        Logger.info(`[analyzeInquiry] 大小校验通过${maxStringLength}`);
         // --- 校验逻辑结束 ---
 
         let rawText = '';
@@ -72,13 +73,13 @@ export const analyzeInquiry = async (req: AuthRequest, res: Response) => {
             });
             return;
         }
-        console.log(`[analyzeInquiry] 安全检测通过`);
+        Logger.info(`[analyzeInquiry] 安全检测通过`);
 
         // 2. 数据脱敏
         const maskedContent = typeof content === 'string'
             ? SecurityService.maskSensitiveData(content)
             : content;
-        console.log(`[analyzeInquiry] 数据脱敏通过`);
+        Logger.info(`[analyzeInquiry] 数据脱敏通过`);
 
         // 3. 调用 AI 解析 (智能路由)
         let items = [];
@@ -93,11 +94,11 @@ export const analyzeInquiry = async (req: AuthRequest, res: Response) => {
             const timeoutPromise = new Promise((_, reject) => {
                 setTimeout(() => reject(new Error(`解析超时 (>${config.upload.timeoutMs}ms)`)), config.upload.timeoutMs);
             });
-            console.log(`[analyzeInquiry] 开始调用 AI 解析 model: ${model}, typeof content: ${typeof content}`);
+            Logger.info(`[analyzeInquiry] 开始调用 AI 解析 model: ${model}, typeof content: ${typeof content}`);
 
             if (typeof content !== 'string' && model === 'deepseek') {
                 // --- 混合模式 ---
-                console.log(`[analyzeInquiry] 启用混合模式: OCR -> DeepSeek Logic`);
+                Logger.info(`[analyzeInquiry] 启用混合模式: OCR -> DeepSeek Logic`);
                 actualModelUsed = 'deepseek (hybrid)';
 
                 // 1. OCR (Aliyun or Gemini)
@@ -115,20 +116,20 @@ export const analyzeInquiry = async (req: AuthRequest, res: Response) => {
                 const isImage = mimeType.startsWith('image/');
 
                 if (config.ai.aliyunKey && isImage) {
-                    console.log(`${new Date().toISOString()}[analyzeInquiry] 使用 Aliyun Qwen-VL OCR (${mimeType})`);
+                    Logger.info(`[analyzeInquiry] 使用 Aliyun Qwen-VL OCR (${mimeType})`);
                     ocrTask = extractTextFromImageAliyun(contentObj);
                 } else {
-                    console.log(`${new Date().toISOString()}[analyzeInquiry] 使用 Gemini OCR (Fallback for ${mimeType})`);
+                    Logger.info(`[analyzeInquiry] 使用 Gemini OCR (Fallback for ${mimeType})`);
                     ocrTask = extractTextFromImage(contentObj);
                 }
-                console.log(`${new Date().toISOString()}[analyzeInquiry] 调用结束 OCR `);
+                Logger.info(`[analyzeInquiry] 调用结束 OCR `);
                 // Non-blocking debug logging
-                ocrTask.then((data: string) => console.log(`${new Date().toISOString()}[analyzeInquiry] ocrTask resolved. Preview: ${data?.substring(0, 100)}...`));
-                timeoutPromise.catch(err => console.log(`${new Date().toISOString()}[analyzeInquiry] timeoutPromise rejected: ${(err as Error).message}`));
+                ocrTask.then((data: string) => Logger.debug(`[analyzeInquiry] ocrTask resolved. Preview: ${data?.substring(0, 100)}...`));
+                timeoutPromise.catch(err => Logger.debug(`[analyzeInquiry] timeoutPromise rejected: ${(err as Error).message}`));
 
 
                 const rawOcrText = await Promise.race([ocrTask, timeoutPromise]) as string;
-                console.log(`${new Date().toISOString()}[analyzeInquiry] OCR 提取文本长度: ${rawOcrText.length} `);
+                Logger.info(`[analyzeInquiry] OCR 提取文本长度: ${rawOcrText.length} `);
 
                 // 2. 脱敏
                 const maskedOcrText = SecurityService.maskSensitiveData(rawOcrText);
@@ -154,7 +155,7 @@ export const analyzeInquiry = async (req: AuthRequest, res: Response) => {
             }
 
             aiRawResponse = JSON.stringify(items, null, 2);
-            console.log(`[analyzeInquiry] AI 解析完成`);
+            Logger.info(`[analyzeInquiry] AI 解析完成`);
             // 4. 记录成功审计日志
             await AuditLogModel.create({
                 user_id: userId,
@@ -168,7 +169,7 @@ export const analyzeInquiry = async (req: AuthRequest, res: Response) => {
                 end_time: new Date(),
                 error_details: null
             });
-            console.log(`[analyzeInquiry] 记录成功审计日志`);
+            Logger.info(`[analyzeInquiry] 记录成功审计日志`);
 
             // 5. 返回结果，包含调试信息
             res.json({
@@ -182,7 +183,7 @@ export const analyzeInquiry = async (req: AuthRequest, res: Response) => {
             // console.log(`[analyzeInquiry] 返回结果，包含调试信息: `, items);
 
         } catch (aiError: any) {
-            console.error('AI 解析失败:', aiError);
+            Logger.error('AI 解析失败:', aiError);
             await AuditLogModel.create({
                 user_id: userId,
                 action: 'analyze_inquiry',
@@ -200,7 +201,7 @@ export const analyzeInquiry = async (req: AuthRequest, res: Response) => {
         }
 
     } catch (error: any) {
-        console.error('解析错误:', error);
+        Logger.error('解析错误:', error);
         res.status(500).json({ error: error.message || '解析失败' });
     }
 };

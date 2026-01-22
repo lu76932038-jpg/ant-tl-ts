@@ -4,13 +4,14 @@ import { ParsedInquiryItem } from '../types';
 import { normalizeInquiryData } from "../utils/inquiryUtils";
 import { config } from '../config/env';
 import { EXTRACT_INSTRUCTION_DEEPSEEK, SQL_INSTRUCTION, ANSWER_INSTRUCTION, RESTORE_RAW_TABLE_INSTRUCTION } from '../config/prompts';
+import { Logger } from '../utils/logger';
 
 /**
  * 将自然语言转换为针对 ant_order 表的查询 SQL (DeepSeek 版)
  */
 export const generateSqlForOrdersDeepSeek = async (prompt: string): Promise<{ sql: string, debug: { prompt: string, response: string } }> => {
     if (!config.ai.deepseekKey) {
-        console.warn("缺少 DEEPSEEK_API_KEY, 请在 server/.env 中配置");
+        Logger.warn("缺少 DEEPSEEK_API_KEY, 请在 server/.env 中配置");
         throw new Error("服务端未配置 DeepSeek API Key");
     }
 
@@ -20,7 +21,7 @@ export const generateSqlForOrdersDeepSeek = async (prompt: string): Promise<{ sq
     };
 
     if (config.proxy) {
-        console.log(`[DeepSeek] Using Proxy: ${config.proxy}`);
+        Logger.info(`[DeepSeek] Using Proxy: ${config.proxy}`);
         options.httpAgent = new HttpsProxyAgent(config.proxy);
     }
 
@@ -48,7 +49,7 @@ export const generateSqlForOrdersDeepSeek = async (prompt: string): Promise<{ sq
 
     const systemInstruction = SQL_INSTRUCTION;
 
-    console.log(`[DeepSeek SQL] Prompt: ${prompt}, Today: ${today}`);
+    Logger.info(`[DeepSeek SQL] Prompt: ${prompt}, Today: ${today}`);
 
     try {
         const messages = [
@@ -66,7 +67,7 @@ export const generateSqlForOrdersDeepSeek = async (prompt: string): Promise<{ sq
         const rawResponse = completion.choices[0].message.content || "";
         // 简单清理，防止 AI 返回了 markdown
         const sql = rawResponse.replace(/```sql|```/g, '').trim();
-        console.log(`[DeepSeek SQL] Generated: ${sql}`);
+        Logger.info(`[DeepSeek SQL] Generated: ${sql}`);
 
         return {
             sql,
@@ -76,7 +77,7 @@ export const generateSqlForOrdersDeepSeek = async (prompt: string): Promise<{ sq
             }
         };
     } catch (error) {
-        console.error("DeepSeek SQL Generation Error:", error);
+        Logger.error("DeepSeek SQL Generation Error:", error);
         throw error;
     }
 };
@@ -93,7 +94,7 @@ export const extractDataFromContent = async (
     }
 
     if (typeof content !== 'string') {
-        console.warn("[DeepSeek]暂不支持图片分析，请检查调用逻辑");
+        Logger.warn("[DeepSeek]暂不支持图片分析，请检查调用逻辑");
         return { data: [], debug: { prompt: "", response: "" } };
     }
 
@@ -137,11 +138,11 @@ export const extractDataFromContent = async (
                 parsedData = [parsed];
             }
         } catch (e) {
-            console.error("DeepSeek JSON Parse Error", e);
+            Logger.error("DeepSeek JSON Parse Error", e);
             parsedData = [];
         }
 
-        console.log('[DeepSeek] 结束请求:', new Date().toISOString());
+        Logger.info('[DeepSeek] 结束请求');
 
         return {
             data: normalizeInquiryData(parsedData),
@@ -153,7 +154,7 @@ export const extractDataFromContent = async (
         };
 
     } catch (error) {
-        console.error("DeepSeek Extraction Error:", error);
+        Logger.error("DeepSeek Extraction Error:", error);
         throw error;
     }
 };
@@ -203,7 +204,7 @@ export const generateAnswerFromDataDeepSeek = async (originalPrompt: string, dat
             }
         };
     } catch (error) {
-        console.error("DeepSeek Answer Generation Error:", error);
+        Logger.error("DeepSeek Answer Generation Error:", error);
         return { answer: "", debug: { prompt: "", response: "" } };
     }
 };
@@ -241,14 +242,14 @@ export const restoreRawTable = async (content: string): Promise<any[]> => {
             const parsed = JSON.parse(resultText);
             data = Array.isArray(parsed) ? parsed : (parsed.items || [parsed]);
         } catch (e) {
-            console.error("DeepSeek JSON Parse Error", e);
+            Logger.error("DeepSeek JSON Parse Error", e);
             return [];
         }
 
-        console.log(`[DeepSeek Restore] Table restored with ${data.length} rows`);
+        Logger.info(`[DeepSeek Restore] Table restored with ${data.length} rows`);
         return data;
     } catch (error) {
-        console.error("DeepSeek Restore Error:", error);
+        Logger.error("DeepSeek Restore Error:", error);
         throw error;
     }
 };
