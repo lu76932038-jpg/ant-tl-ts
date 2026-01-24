@@ -13,6 +13,7 @@
     "@types/file-saver": "^2.0.7",
     "arima": "^0.2.5",
     "axios": "^1.13.2",
+    "date-fns": "^4.1.0",
     "file-saver": "^2.0.5",
     "jszip": "^3.10.1",
     "lucide-react": "^0.562.0",

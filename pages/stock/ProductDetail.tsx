@@ -36,7 +36,7 @@ const ProductDetail: React.FC = () => {
     const [isSaving, setIsSaving] = useState(false);
 
     // UI States
-    const [editSafetyStock, setEditSafetyStock] = useState<number>(0.6);
+    const [editSafetyStock, setEditSafetyStock] = useState<number>(3);
     const [selectedStartMonth, setSelectedStartMonth] = useState<string>(''); // For Start Year-Month
     const [selectedForecastMonth, setSelectedForecastMonth] = useState<string>(''); // For Forecast Year-Month
     const [replenishmentMode, setReplenishmentMode] = useState<'fast' | 'economic'>('economic');
@@ -55,6 +55,24 @@ const ProductDetail: React.FC = () => {
     const [isEditingSupplier, setIsEditingSupplier] = useState(false);
     const [editSupplierInfo, setEditSupplierInfo] = useState<SupplierInfo | null>(null);
     const [isCreatingPO, setIsCreatingPO] = useState(false);
+
+    // V3.0.1 任务11: 补货设置状态
+    const [autoReplenishment, setAutoReplenishment] = useState(false);
+    const [autoReplenishmentTime, setAutoReplenishmentTime] = useState('08:00');
+    // Daily Seasonality
+    const [dayOfWeekFactors, setDayOfWeekFactors] = useState<number[]>([]);
+
+    // 已保存的策略参数值（用于检测未保存变更）
+    const [savedStrategyValues, setSavedStrategyValues] = useState<{
+        safetyStock: number;
+        replenishmentMode: 'fast' | 'economic';
+    } | null>(null);
+
+    // 计算是否有未保存的变更
+    const hasUnsavedChanges = savedStrategyValues !== null && (
+        savedStrategyValues.safetyStock !== editSafetyStock ||
+        savedStrategyValues.replenishmentMode !== replenishmentMode
+    );
 
     // Helper to calculate date range
     const getForecastDateRange = (months: number) => {
@@ -118,6 +136,9 @@ const ProductDetail: React.FC = () => {
         try {
             const result: any = await api.get(`/products/${sku}/detail`);
             setData(result);
+            if (result.kpi?.weekWeights) {
+                setDayOfWeekFactors(result.kpi.weekWeights);
+            }
         } catch (error) {
             console.error('Failed to fetch details', error);
         } finally {
@@ -146,11 +167,32 @@ const ProductDetail: React.FC = () => {
             if (result.strategy.forecast_overrides) setForecastOverrides(typeof result.strategy.forecast_overrides === 'string' ? JSON.parse(result.strategy.forecast_overrides) : result.strategy.forecast_overrides);
             if (result.strategy.calculated_forecasts) setCalculatedForecasts(typeof result.strategy.calculated_forecasts === 'string' ? JSON.parse(result.strategy.calculated_forecasts) : result.strategy.calculated_forecasts);
 
+            // Replenishment Mode
+            if (result.strategy.replenishment_mode) setReplenishmentMode(result.strategy.replenishment_mode as any);
+
+            // V3.0.1 任务11: 加载补货设置
+            if (result.strategy.auto_replenishment !== undefined) setAutoReplenishment(result.strategy.auto_replenishment);
+            if (result.strategy.auto_replenishment_time) setAutoReplenishmentTime(result.strategy.auto_replenishment_time);
+
+            // 保存初始值用于检测变更
+            setSavedStrategyValues({
+                safetyStock: result.strategy.safety_stock_days || 3,
+                replenishmentMode: result.strategy.replenishment_mode || 'economic'
+            });
+
             const currentYear = new Date().getFullYear();
             // Default Start: Last Year Jan
             setSelectedStartMonth(result.strategy.start_year_month || `${currentYear - 1}-01`);
             // Default End: Current Year Dec
             setSelectedForecastMonth(result.strategy.forecast_year_month || `${currentYear}-12`);
+
+            // Ensure supplier info has a default object if null so the card shows up
+            if (!result.supplier) {
+                const emptySupplier = { name: '未设置', code: 'N/A', price: 0, leadTime: 0 };
+                setSupplier(emptySupplier as any);
+                setEditSupplierInfo(emptySupplier as any);
+            }
+
         } catch (error) {
             console.error('Failed to fetch strategy', error);
         }
@@ -177,6 +219,7 @@ const ProductDetail: React.FC = () => {
                 start_year_month: selectedStartMonth,
                 forecast_year_month: selectedForecastMonth,
                 safety_stock_days: editSafetyStock,
+                replenishment_mode: replenishmentMode, // Save replenishment mode
                 benchmark_type: benchmarkType,
                 mom_range: momRange,
                 mom_time_sliders: momTimeSliders,
@@ -187,11 +230,20 @@ const ProductDetail: React.FC = () => {
                 forecast_overrides: forecastOverrides,
                 calculated_forecasts: calculatedForecasts,
                 supplier_info: supplierToSave,
-                log_content: `更新库存策略配置: 安全库存 ${editSafetyStock} 个月, 补货模式: ${replenishmentMode === 'fast' ? '快速补货' : '经济补货'}`
+                // V3.0.1 任务11: 补货设置
+                auto_replenishment: autoReplenishment,
+                auto_replenishment_time: autoReplenishmentTime,
+                // V3.0.1 任务11: 详细日志记录
+                log_content: `更新库存策略配置: 安全库存 ${editSafetyStock} 个月, 补货模式: ${replenishmentMode === 'fast' ? '快速补货(7天)' : '经济补货(30天)'}, 补货方式: ${autoReplenishment ? '自动(' + autoReplenishmentTime + ')' : '手动'}`
             });
             // Refresh data
             setStrategy(result.strategy);
             fetchLogs(); // Refresh logs to show auto-approval
+            // 更新已保存的策略值
+            setSavedStrategyValues({
+                safetyStock: editSafetyStock,
+                replenishmentMode: replenishmentMode
+            });
             alert('策略更新成功！(系统自动审批通过)');
         } catch (error) {
             console.error('Save failed', error);
@@ -437,6 +489,7 @@ const ProductDetail: React.FC = () => {
     // Calculation Logic
     const handleRunForecast = () => {
         if (!data) return;
+        if (!strategy) return;
         const newCalculated: Record<string, number> = {};
         const forecastMonthsList = getForecastMonths(); // Grouped by year
         const flatForecastMonths = Object.values(forecastMonthsList).flat();
@@ -512,6 +565,25 @@ const ProductDetail: React.FC = () => {
                 prediction = totalWeight > 0 ? val / totalWeight : 0;
             }
 
+
+            // Debug Log
+            if (benchmarkType === 'yoy' && target.month === 1) { // Log Jan as sample
+                console.log(`[Forecast Debug] ${target.key}:`, {
+                    historyValues: [
+                        yoyRange >= 1 ? getHistoryValue(`${target.year - 1}-${String(target.month).padStart(2, '0')}`) : null,
+                        yoyRange >= 2 ? getHistoryValue(`${target.year - 2}-${String(target.month).padStart(2, '0')}`) : null,
+                        yoyRange >= 3 ? getHistoryValue(`${target.year - 3}-${String(target.month).padStart(2, '0')}`) : null,
+                    ],
+                    weights: [
+                        yoyWeightSliders[0] / 100,
+                        (yoyWeightSliders[1] - yoyWeightSliders[0]) / 100,
+                        (100 - yoyWeightSliders[1]) / 100
+                    ],
+                    rawPrediction: prediction,
+                    ratioAdjusted: Math.round(prediction * (1 + ratioAdjustment / 100))
+                });
+            }
+
             newCalculated[target.key] = Math.round(prediction);
         });
 
@@ -520,9 +592,9 @@ const ProductDetail: React.FC = () => {
         setIsSaving(true);
         api.post(`/products/${sku}/strategy`, {
             ...strategy,
+            // FORECAST PARAMS (Update with new UI state)
             start_year_month: selectedStartMonth,
             forecast_year_month: selectedForecastMonth,
-            safety_stock_days: editSafetyStock,
             benchmark_type: benchmarkType,
             mom_range: momRange,
             mom_time_sliders: momTimeSliders,
@@ -531,10 +603,19 @@ const ProductDetail: React.FC = () => {
             yoy_weight_sliders: yoyWeightSliders,
             ratio_adjustment: ratioAdjustment,
             forecast_overrides: forecastOverrides, // Current overrides
-            calculated_forecasts: newCalculated    // Newly calculated
+            calculated_forecasts: newCalculated,    // Newly calculated
+
+            // NON-FORECAST PARAMS (Preserve existing DB state to facilitate isolated updates)
+            // Even if the user has changed these in the UI (Draft state), we don't save them here.
+            safety_stock_days: strategy.safety_stock_days,
+            replenishment_mode: strategy.replenishment_mode,
+            supplier_info: strategy.supplier_info,
+
+            log_content: `更新销售预测配置: 基准 ${benchmarkType === 'mom' ? '环比' : '同比'}, 比率调整 ${ratioAdjustment}%`
         }).then((result: any) => {
             setStrategy(result.strategy);
             fetchLogs();
+            fetchProductDetail(); // Refresh chart data to reflect new forecasts
         }).finally(() => setIsSaving(false));
 
         setCalculatedForecasts(newCalculated);
@@ -709,6 +790,12 @@ const ProductDetail: React.FC = () => {
                                 currentLeadTime={currentLeadTime}
                                 isCreatingPO={isCreatingPO}
                                 onCreatePO={handleCreatePO}
+                                hasUnsavedChanges={hasUnsavedChanges}
+                                supplier={editSupplierInfo}
+                                autoReplenishment={autoReplenishment}
+                                setAutoReplenishment={setAutoReplenishment}
+                                autoReplenishmentTime={autoReplenishmentTime}
+                                setAutoReplenishmentTime={setAutoReplenishmentTime}
                             />      {/* 2. Supplier Card (Refactored for Edit) */}
                             {/* 2. Supplier Card */}
                             <SupplierCard
@@ -734,6 +821,7 @@ const ProductDetail: React.FC = () => {
                                 forecastOverrides={forecastOverrides}
                                 setForecastOverrides={setForecastOverrides}
                                 calculatedForecasts={calculatedForecasts}
+                                dayOfWeekFactors={dayOfWeekFactors}
                             />
 
                             {/* 1. Main Forecast & Inventory Simulation Chart - Nano Design Refactor */}
@@ -750,6 +838,9 @@ const ProductDetail: React.FC = () => {
                                 editSafetyStock={editSafetyStock}
                                 currentLeadTime={currentLeadTime}
                                 eoq={strategy?.eoq || 500}
+                                dayOfWeekFactors={dayOfWeekFactors}
+                                forecastOverrides={forecastOverrides}
+                                calculatedForecasts={calculatedForecasts}
                             />
 
                             {/* 4. Operation Logs */}
@@ -757,8 +848,8 @@ const ProductDetail: React.FC = () => {
                         </div>
                     </div>
                 </div>
-            </main >
-        </div >
+            </main>
+        </div>
     );
 };
 export default ProductDetail;

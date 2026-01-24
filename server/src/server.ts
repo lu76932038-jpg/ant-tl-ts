@@ -42,6 +42,10 @@ async function initializeDatabase() {
 async function startServer() {
     await initializeDatabase();
 
+    // Start Scheduler
+    const { SchedulerService } = require('./services/SchedulerService');
+    SchedulerService.init();
+
     httpServer.listen(PORT as number, '0.0.0.0', () => {
         console.log(`Server is running with WebSocket support on port ${PORT}`);
         console.log(`Environment: ${config.server.env}`);

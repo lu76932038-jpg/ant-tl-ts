@@ -11,6 +11,9 @@ export interface ProductStrategy {
     service_level: number; // 0.95
     rop: number;
     eoq: number;
+    // Auto Replenishment
+    auto_replenishment?: boolean;
+    auto_replenishment_time?: string;
     // New Forecast Config Fields
     benchmark_type?: 'mom' | 'yoy';
     mom_range?: number;
@@ -22,6 +25,7 @@ export interface ProductStrategy {
     forecast_overrides?: any; // JSON Record<string, number>
     calculated_forecasts?: any; // JSON Record<string, number>
     supplier_info?: any; // JSON { name, code, price, lead_time_tiers, etc }
+    replenishment_mode?: 'fast' | 'economic'; // ADDED
     updated_at?: Date;
 }
 
@@ -60,6 +64,7 @@ export class StrategyModel {
                     forecast_overrides JSON DEFAULT NULL,
                     calculated_forecasts JSON DEFAULT NULL,
                     supplier_info JSON DEFAULT NULL,
+                    replenishment_mode VARCHAR(20) DEFAULT 'economic',
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 );
             `);
@@ -87,6 +92,9 @@ export class StrategyModel {
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN forecast_overrides JSON DEFAULT NULL");
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN calculated_forecasts JSON DEFAULT NULL");
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN supplier_info JSON DEFAULT NULL");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN replenishment_mode VARCHAR(20) DEFAULT 'economic'");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN auto_replenishment BOOLEAN DEFAULT FALSE");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN auto_replenishment_time VARCHAR(10) DEFAULT NULL");
 
             console.log('product_strategies table initialized/updated.');
 
@@ -122,7 +130,7 @@ export class StrategyModel {
             sku, start_year_month, forecast_cycle, forecast_year_month,
             safety_stock_days, service_level, rop, eoq,
             benchmark_type, mom_range, mom_time_sliders, mom_weight_sliders, yoy_range, yoy_weight_sliders, ratio_adjustment,
-            forecast_overrides, calculated_forecasts, supplier_info
+            forecast_overrides, calculated_forecasts, supplier_info, replenishment_mode
         } = strategy;
 
         await pool.execute(
@@ -130,9 +138,10 @@ export class StrategyModel {
                 sku, start_year_month, forecast_cycle, forecast_year_month,
                 safety_stock_days, service_level, rop, eoq,
                 benchmark_type, mom_range, mom_time_sliders, mom_weight_sliders, yoy_range, yoy_weight_sliders, ratio_adjustment,
-                forecast_overrides, calculated_forecasts, supplier_info
+                forecast_overrides, calculated_forecasts, supplier_info, replenishment_mode,
+                auto_replenishment, auto_replenishment_time
             )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                 start_year_month = VALUES(start_year_month),
                 forecast_cycle = VALUES(forecast_cycle),
@@ -150,7 +159,10 @@ export class StrategyModel {
                 ratio_adjustment = VALUES(ratio_adjustment),
                 forecast_overrides = VALUES(forecast_overrides),
                 calculated_forecasts = VALUES(calculated_forecasts),
-                supplier_info = VALUES(supplier_info)
+                supplier_info = VALUES(supplier_info),
+                replenishment_mode = VALUES(replenishment_mode),
+                auto_replenishment = VALUES(auto_replenishment),
+                auto_replenishment_time = VALUES(auto_replenishment_time)
             `,
             [
                 sku, start_year_month || null, forecast_cycle || 6, forecast_year_month || null,
@@ -161,9 +173,20 @@ export class StrategyModel {
                 ratio_adjustment ?? 0,
                 forecast_overrides ? JSON.stringify(forecast_overrides) : null,
                 calculated_forecasts ? JSON.stringify(calculated_forecasts) : null,
-                supplier_info ? JSON.stringify(supplier_info) : null
+                supplier_info ? JSON.stringify(supplier_info) : null,
+                replenishment_mode || 'economic',
+                strategy.auto_replenishment ?? false,
+                strategy.auto_replenishment_time ?? null
             ]
         );
+    }
+
+    static async findAutoReplenishmentCandidates(timeHHMM: string): Promise<ProductStrategy[]> {
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            'SELECT * FROM product_strategies WHERE auto_replenishment = 1 AND auto_replenishment_time = ?',
+            [timeHHMM]
+        );
+        return rows as ProductStrategy[];
     }
 
     static async addLog(log: AuditLog): Promise<void> {

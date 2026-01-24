@@ -25,6 +25,9 @@ interface ChartData {
     simStock?: number; // Simulated Stock Level
     simSafety?: number; // Safety Stock Line
     simRop?: number; // ROP Line
+
+    // Daily Forecast
+    daily_forecasts?: { date: string, quantity: number }[];
 }
 
 export class ProductController {
@@ -55,6 +58,33 @@ export class ProductController {
                  ORDER BY month ASC`,
                 [sku]
             );
+
+            // 2.1.b [New] Calculate Weekday Seasonality (Last 12 months)
+            // 0=Mon, 6=Sun in WEEKDAY() - WAIT: MySQL WEEKDAY() 0=Mon, 6=Sun.
+            const [seasonality] = await pool.execute<RowDataPacket[]>(
+                `SELECT 
+                    WEEKDAY(outbound_date) as wd, 
+                    SUM(quantity) as total_qty 
+                 FROM shiplist 
+                 WHERE product_model = ? 
+                   AND outbound_date >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+                 GROUP BY wd`,
+                [sku]
+            );
+
+            // Calculate weights
+            let weekWeights = new Array(7).fill(0);
+            const totalSeasonqty = seasonality.reduce((sum: number, row: any) => sum + Number(row.total_qty), 0);
+
+            if (totalSeasonqty > 0) {
+                // Populate weights: index 0 = Mon, ... 6 = Sun
+                seasonality.forEach((row: any) => {
+                    weekWeights[row.wd] = Number(row.total_qty) / totalSeasonqty;
+                });
+            } else {
+                // Fallback to uniform if no history
+                weekWeights = new Array(7).fill(1 / 7);
+            }
 
             // 2.2 Strategy Config (ROP, EOQ)
             let strategy = await StrategyModel.findBySku(sku);
@@ -197,14 +227,68 @@ export class ProductController {
             let currentSimStock = product.inStock;
             const safetyStock = Math.round((strategy.rop || 0) * 0.6); // Estimated
 
+            // Parse Strategy Forecasts
+            let strategyOverrides: Record<string, number> = {};
+            let strategyCalculated: Record<string, number> = {};
+            try {
+                if (strategy.forecast_overrides) {
+                    strategyOverrides = typeof strategy.forecast_overrides === 'string'
+                        ? JSON.parse(strategy.forecast_overrides)
+                        : strategy.forecast_overrides;
+                }
+                if (strategy.calculated_forecasts) {
+                    strategyCalculated = typeof strategy.calculated_forecasts === 'string'
+                        ? JSON.parse(strategy.calculated_forecasts)
+                        : strategy.calculated_forecasts;
+                }
+            } catch (e) {
+                console.error('Error parsing strategy forecasts:', e);
+            }
+
             // Generate Future Chart Data
             for (let i = 1; i <= forecastHorizon; i++) {
                 const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-                const monthStr = `${d.getFullYear()} -${String(d.getMonth() + 1).padStart(2, '0')} `;
+                const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
-                const fQty = forecastQty[i - 1];
+                // Priority: Manual Override > Calculated Default > Realtime ARIMA
+                let fQty = forecastQty[i - 1];
+                if (strategyOverrides[monthStr] !== undefined) {
+                    fQty = Number(strategyOverrides[monthStr]);
+                } else if (strategyCalculated[monthStr] !== undefined) {
+                    fQty = Number(strategyCalculated[monthStr]);
+                }
+
                 const fCustomers = forecastCustomers[i - 1];
                 const fAmount = Math.round(fQty * recentPrice);
+
+                // --- Generate Daily Forecasts ---
+                const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+                const forecastDaily: { date: string, quantity: number }[] = [];
+
+                // Calculate total weight for this specific month
+                let totalMonthWeight = 0;
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const tempDate = new Date(d.getFullYear(), d.getMonth(), day);
+                    const jsDay = tempDate.getDay();
+                    const mysqlWd = jsDay === 0 ? 6 : jsDay - 1;
+                    totalMonthWeight += weekWeights[mysqlWd];
+                }
+
+                // Distribute Qty
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const tempDate = new Date(d.getFullYear(), d.getMonth(), day);
+                    const dateStr = tempDate.toISOString().split('T')[0];
+                    const jsDay = tempDate.getDay();
+                    const mysqlWd = jsDay === 0 ? 6 : jsDay - 1;
+
+                    let dailyQ = 0;
+                    if (totalMonthWeight > 0) {
+                        dailyQ = (fQty * weekWeights[mysqlWd]) / totalMonthWeight;
+                    } else {
+                        dailyQ = fQty / daysInMonth;
+                    }
+                    forecastDaily.push({ date: dateStr, quantity: dailyQ });
+                }
 
                 // Get planned inbound for this month
                 const plannedInbound = futureEntries
@@ -243,7 +327,10 @@ export class ProductController {
                     // Sim Fields
                     simStock: currentSimStock,
                     simSafety: safetyStock,
-                    simRop: strategy.rop
+                    simRop: strategy.rop,
+
+                    // Daily Data
+                    daily_forecasts: forecastDaily
                 });
             }
 
@@ -260,7 +347,8 @@ export class ProductController {
                     sales30Days,
                     turnoverDays,
                     stockoutRisk,
-                    inTransitBatches
+                    inTransitBatches,
+                    weekWeights // 0=Mon, 6=Sun
                 },
                 charts: chartData
             });
@@ -286,13 +374,64 @@ export class ProductController {
             await StrategyModel.addLog({
                 sku,
                 action_type: 'UPDATE_STRATEGY',
-                content: JSON.stringify({ desc: '更新预测/补货策略配置', diff: body }),
+                // Use frontend provided log content if available, otherwise default to generic diff
+                content: body.log_content || JSON.stringify({ desc: '更新预测/补货策略配置', diff: body }),
                 status: 'AUTO_APPROVED'
             });
 
             res.json({ success: true });
         } catch (error) {
             console.error('Error updating strategy:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+
+    static async getStrategy(req: Request, res: Response) {
+        try {
+            const { sku } = req.params;
+            const strategy = await StrategyModel.findBySku(sku);
+
+            // Should also return supplier info, defaulting if not found
+            // In the frontend it expects { strategy: ..., supplier: ... }
+            // StrategyModel.findBySku returns the strategy row which includes supplier_info JSON
+
+            if (!strategy) {
+                // Return default skeleton if not found
+                return res.json({
+                    strategy: {
+                        sku,
+                        safety_stock_days: 0.6,
+                        rop: 0,
+                        eoq: 0
+                    },
+                    supplier: null
+                });
+            }
+
+            // Parse supplier_info if it's a string (though it should be object if using JSON type in newer mysql/driver, but safety first)
+            let supplier = strategy.supplier_info;
+            if (typeof supplier === 'string') {
+                try { supplier = JSON.parse(supplier); } catch { }
+            }
+
+            res.json({
+                strategy,
+                supplier
+            });
+
+        } catch (error) {
+            console.error('Error fetching strategy:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+
+    static async getLogs(req: Request, res: Response) {
+        try {
+            const { sku } = req.params;
+            const logs = await StrategyModel.getLogs(sku);
+            res.json(logs);
+        } catch (error) {
+            console.error('Error fetching logs:', error);
             res.status(500).json({ error: 'Internal server error' });
         }
     }

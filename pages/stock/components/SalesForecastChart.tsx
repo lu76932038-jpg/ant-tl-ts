@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Download, Package, ShoppingCart, Truck as TruckIcon } from 'lucide-react';
 import {
     ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Brush
@@ -78,6 +78,16 @@ const SalesForecastChart: React.FC<SalesForecastChartProps> = ({
         amount: true,
         customers: true
     });
+
+    // Add mount check with delay to ensure flex container has size
+    const [isMounted, setIsMounted] = useState(false);
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setIsMounted(true);
+        }, 150);
+        return () => clearTimeout(timer);
+    }, []);
+
     return (
         <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/20 ring-1 ring-gray-100/50 p-8 flex flex-col h-[650px] transition-all duration-500 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
             <div className="flex flex-col gap-6 mb-8">
@@ -166,204 +176,209 @@ const SalesForecastChart: React.FC<SalesForecastChartProps> = ({
             </div>
 
             <div className="flex-1 w-full min-h-0 relative">
-                <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={displayData} margin={{ top: 30, right: 20, left: 15, bottom: 0 }}>
-                        <defs>
-                            {/* Actual Quantity Gradient */}
-                            <linearGradient id="qtyGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#3B82F6" stopOpacity={1} />
-                                <stop offset="100%" stopColor="#60A5FA" stopOpacity={1} />
-                            </linearGradient>
-                            {/* Forecast Quantity Pattern - Striped */}
-                            <pattern id="forecastPattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-                                <rect width="4" height="8" transform="translate(0,0)" fill="#93C5FD" opacity="0.4" />
-                            </pattern>
-                            {/* Shadow for Amount Line */}
-                            <filter id="shadowAmount" height="200%">
-                                <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#10B981" floodOpacity="0.3" />
-                            </filter>
-                        </defs>
+                {isMounted && (
+                    <div className="absolute inset-0">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart data={displayData} margin={{ top: 30, right: 20, left: 15, bottom: 0 }}>
+                                <defs>
+                                    {/* Actual Quantity Gradient */}
+                                    <linearGradient id="qtyGradient" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor="#3B82F6" stopOpacity={1} />
+                                        <stop offset="100%" stopColor="#60A5FA" stopOpacity={1} />
+                                    </linearGradient>
+                                    {/* Forecast Quantity Pattern - Striped */}
+                                    <pattern id="forecastPattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
+                                        <rect width="4" height="8" transform="translate(0,0)" fill="#93C5FD" opacity="0.4" />
+                                    </pattern>
+                                    {/* Shadow for Amount Line */}
+                                    <filter id="shadowAmount" height="200%">
+                                        <feDropShadow dx="0" dy="4" stdDeviation="4" floodColor="#10B981" floodOpacity="0.3" />
+                                    </filter>
+                                </defs>
 
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
 
-                        <XAxis
-                            dataKey="month"
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fontSize: 11, fill: '#94A3B8' }}
-                            dy={15}
-                        />
+                                <XAxis
+                                    dataKey="month"
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fontSize: 11, fill: '#94A3B8' }}
+                                    dy={15}
+                                />
 
-                        {/* Y Axis 1: Quantity (Left) */}
-                        <YAxis
-                            yAxisId="left"
-                            orientation="left"
-                            domain={[0, 'auto']}
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fontSize: 10, fill: '#94A3B8' }}
-                            tickFormatter={(val) => {
-                                if (val >= 10000) {
-                                    const formatted = (val / 1000).toFixed(1).replace(/\.0$/, '');
-                                    return `${formatted}k`;
-                                }
-                                return val.toLocaleString();
-                            }}
-                            width={60}
-                            tickMargin={5}
-                        />
-
-                        {/* Y Axis 2: Amount (Right) - Hidden line, just labels */}
-                        <YAxis
-                            yAxisId="right"
-                            orientation="right"
-                            domain={[0, 'auto']}
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fontSize: 10, fill: '#10B981' }}
-                            tickFormatter={(val) => {
-                                if (val >= 10000) {
-                                    const formatted = (val / 10000).toFixed(1).replace(/\.0$/, '');
-                                    return `${formatted}w`;
-                                }
-                                return val.toLocaleString();
-                            }}
-                            width={70}
-                            tickMargin={5}
-                        />
-
-                        {/* Y Axis 3: Customers (Hidden) */}
-                        <YAxis yAxisId="customers" orientation="left" hide domain={['auto', 'auto']} />
-
-                        <Tooltip
-                            content={<CustomTooltip />}
-                            cursor={{ fill: '#F8FAFC', opacity: 0.8 }}
-                        />
-
-                        <Legend content={() => null} />
-
-                        {/* Brush for Zooming - Styled */}
-                        {viewDimension === 'month' && (
-                            <Brush
-                                dataKey="month"
-                                height={12}
-                                stroke="none"
-                                fill="#F1F5F9"
-                                travellerWidth={6}
-                                tickFormatter={() => ''}
-                                y={620}
-                            />
-                        )}
-
-                        {/* Series: Qty (Stacked Bar) */}
-                        {visibleSeries.qty && (
-                            <>
-                                {/* Actual Qty - Base */}
-                                <Bar
-                                    stackId="qty"
+                                {/* Y Axis 1: Quantity (Left) */}
+                                <YAxis
                                     yAxisId="left"
-                                    dataKey="actualQty"
-                                    name="实际出库数量"
-                                    fill="url(#qtyGradient)"
-                                    barSize={28}
-                                    radius={[4, 4, 4, 4]} // Rounded all around if mostly alone
-                                    animationDuration={1500}
-                                />
-                                {/* Forecast Remainder - Top Stack */}
-                                <Bar
-                                    stackId="qty"
-                                    yAxisId="left"
-                                    dataKey="forecastRemainder"
-                                    name="预测出库数量"
-                                    fill="url(#forecastPattern)"
-                                    barSize={28}
-                                    radius={[4, 4, 0, 0]}
-                                    animationDuration={1500}
-                                />
-                            </>
-                        )}
-
-                        {/* Series: Amount (Line) */}
-                        {visibleSeries.amount && (
-                            <>
-                                <Line
-                                    yAxisId="right"
-                                    type="monotone"
-                                    dataKey="actualAmount"
-                                    name="实际销售金额"
-                                    stroke="#10B981"
-                                    strokeWidth={3}
-                                    dot={false}
-                                    activeDot={{ r: 6, strokeWidth: 0, fill: '#10B981' }}
-                                    filter="url(#shadowAmount)"
-                                />
-                                <Line
-                                    yAxisId="right"
-                                    type="monotone"
-                                    dataKey="forecastAmount"
-                                    name="预测销售金额"
-                                    stroke="#10B981"
-                                    strokeDasharray="4 4"
-                                    strokeWidth={2}
-                                    dot={false}
-                                    activeDot={{ r: 4, fill: '#fff', stroke: '#10B981', strokeWidth: 2 }}
-                                    opacity={0.6}
-                                />
-                            </>
-                        )}
-
-                        {/* Series: Customers (Line/Scatter) */}
-                        {visibleSeries.customers && (
-                            <>
-                                <Line
-                                    yAxisId="customers"
-                                    type="monotone"
-                                    dataKey="actualCustomerCount"
-                                    name="实际客户数量"
-                                    stroke="#F97316"
-                                    strokeWidth={2}
-                                    dot={(props: any) => {
-                                        const { cx, cy, payload } = props;
-                                        if (!payload.actualCustomerCount || payload.actualCustomerCount === 0) return <></>;
-                                        return (
-                                            <circle cx={cx} cy={cy} r={4} fill="#fff" stroke="#F97316" strokeWidth={2} />
-                                        );
+                                    orientation="left"
+                                    domain={[0, 'auto']}
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fontSize: 10, fill: '#94A3B8' }}
+                                    tickFormatter={(val) => {
+                                        if (val >= 10000) {
+                                            const formatted = (val / 1000).toFixed(1).replace(/\.0$/, '');
+                                            return `${formatted}k`;
+                                        }
+                                        return val.toLocaleString();
                                     }}
+                                    width={60}
+                                    tickMargin={5}
                                 />
-                                <Line
-                                    yAxisId="customers"
-                                    type="monotone"
-                                    dataKey="forecastCustomerCount"
-                                    name="预测客户数量"
-                                    stroke="#F97316"
-                                    strokeDasharray="3 3"
-                                    strokeWidth={1.5}
-                                    dot={false}
-                                    opacity={0.7}
+
+                                {/* Y Axis 2: Amount (Right) - Hidden line, just labels */}
+                                <YAxis
+                                    yAxisId="right"
+                                    orientation="right"
+                                    domain={[0, 'auto']}
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={{ fontSize: 10, fill: '#10B981' }}
+                                    tickFormatter={(val) => {
+                                        if (val >= 10000) {
+                                            const formatted = (val / 10000).toFixed(1).replace(/\.0$/, '');
+                                            return `${formatted}w`;
+                                        }
+                                        return val.toLocaleString();
+                                    }}
+                                    width={70}
+                                    tickMargin={5}
                                 />
-                            </>
-                        )}
 
-                        {/* Reference Line for 'Now' */}
-                        {nowLabel && (
-                            <ReferenceLine
-                                yAxisId="left"
-                                x={nowLabel.slice(2)}
-                                stroke="#64748B"
-                                strokeDasharray="2 2"
-                                label={{
-                                    position: 'top',
-                                    value: '当前',
-                                    fill: '#64748B',
-                                    fontSize: 9,
-                                    fontWeight: 'bold',
-                                    className: 'tracking-widest'
-                                }}
-                            />
-                        )}
+                                {/* Y Axis 3: Customers (Hidden) */}
+                                <YAxis yAxisId="customers" orientation="left" hide domain={['auto', 'auto']} />
 
-                    </ComposedChart>
-                </ResponsiveContainer>
+                                <Tooltip
+                                    content={<CustomTooltip />}
+                                    cursor={{ fill: '#F8FAFC', opacity: 0.8 }}
+                                />
+
+                                <Legend content={() => null} />
+
+                                {/* Brush for Zooming - Styled */}
+                                {viewDimension === 'month' && (
+                                    <Brush
+                                        dataKey="month"
+                                        height={12}
+                                        stroke="none"
+                                        fill="#F1F5F9"
+                                        travellerWidth={6}
+                                        tickFormatter={() => ''}
+                                        y={620}
+                                    />
+                                )}
+
+                                {/* Series: Qty (Stacked Bar) */}
+                                {visibleSeries.qty && (
+                                    <>
+                                        {/* Actual Qty - Base */}
+                                        <Bar
+                                            stackId="qty"
+                                            yAxisId="left"
+                                            dataKey="actualQty"
+                                            name="实际出库数量"
+                                            fill="url(#qtyGradient)"
+                                            barSize={28}
+                                            radius={[4, 4, 4, 4]} // Rounded all around if mostly alone
+                                            animationDuration={1500}
+                                        />
+                                        {/* Forecast Remainder - Top Stack */}
+                                        <Bar
+                                            stackId="qty"
+                                            yAxisId="left"
+                                            dataKey="forecastRemainder"
+                                            name="预测出库数量"
+                                            fill="url(#forecastPattern)"
+                                            barSize={28}
+                                            radius={[4, 4, 0, 0]}
+                                            animationDuration={1500}
+                                        />
+                                    </>
+                                )}
+
+                                {/* Series: Amount (Line) */}
+                                {visibleSeries.amount && (
+                                    <>
+                                        <Line
+                                            yAxisId="right"
+                                            type="monotone"
+                                            dataKey="actualAmount"
+                                            name="实际销售金额"
+                                            stroke="#10B981"
+                                            strokeWidth={3}
+                                            dot={false}
+                                            activeDot={{ r: 6, strokeWidth: 0, fill: '#10B981' }}
+                                            filter="url(#shadowAmount)"
+                                        />
+                                        <Line
+                                            yAxisId="right"
+                                            type="monotone"
+                                            dataKey="forecastAmount"
+                                            name="预测销售金额"
+                                            stroke="#10B981"
+                                            strokeDasharray="4 4"
+                                            strokeWidth={2}
+                                            dot={false}
+                                            activeDot={{ r: 4, fill: '#fff', stroke: '#10B981', strokeWidth: 2 }}
+                                            opacity={0.6}
+                                        />
+                                    </>
+                                )}
+
+                                {/* Series: Customers (Line/Scatter) */}
+                                {visibleSeries.customers && (
+                                    <>
+                                        <Line
+                                            yAxisId="customers"
+                                            type="monotone"
+                                            dataKey="actualCustomerCount"
+                                            name="实际客户数量"
+                                            stroke="#F97316"
+                                            strokeWidth={2}
+                                            dot={(props: any) => {
+                                                const { cx, cy, payload } = props;
+                                                if (!payload.actualCustomerCount || payload.actualCustomerCount === 0) return null;
+                                                return (
+                                                    <circle cx={cx} cy={cy} r={4} fill="#fff" stroke="#F97316" strokeWidth={2} />
+                                                );
+                                            }}
+                                        />
+                                        <Line
+                                            yAxisId="customers"
+                                            type="monotone"
+                                            dataKey="forecastCustomerCount"
+                                            name="预测客户数量"
+                                            stroke="#F97316"
+                                            strokeDasharray="3 3"
+                                            strokeWidth={1.5}
+                                            dot={false}
+                                            opacity={0.7}
+                                        />
+                                    </>
+                                )}
+
+                                {/* Reference Line for 'Now' */}
+                                {nowLabel && (
+                                    <ReferenceLine
+                                        yAxisId="left"
+                                        x={nowLabel.slice(2)}
+                                        stroke="#64748B"
+                                        strokeDasharray="2 2"
+                                        label={{
+                                            position: 'top',
+                                            value: '当前',
+                                            fill: '#64748B',
+                                            fontSize: 9,
+                                            fontWeight: 'bold',
+                                            className: 'tracking-widest'
+                                        }}
+                                    />
+                                )}
+
+
+                            </ComposedChart>
+                        </ResponsiveContainer>
+                    </div>
+                )}
             </div>
         </div>
     );

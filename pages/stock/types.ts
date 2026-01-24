@@ -30,6 +30,7 @@ export interface ChartData {
     simStock: number;
     simRop: number;
     simSafety: number;
+    daily_forecasts?: { date: string, quantity: number }[];
 }
 
 export interface StrategyConfig {
@@ -48,6 +49,17 @@ export interface StrategyConfig {
     ratio_adjustment?: number;
     forecast_overrides?: Record<string, number>;
     calculated_forecasts?: Record<string, number>;
+    replenishment_mode?: 'fast' | 'economic';
+    supplier_info?: SupplierInfo;
+    // 补货设置相关字段 (V3.0.1 任务11)
+    auto_replenishment?: boolean; // 是否自动补货
+    auto_replenishment_time?: string; // 自动补货时间 (HH:mm 格式)
+}
+
+export interface PriceTier {
+    minQty: number;      // 最小订购量
+    price: number;       // 单价
+    leadTime: number;    // 交期(天)
 }
 
 export interface SupplierInfo {
@@ -55,6 +67,12 @@ export interface SupplierInfo {
     code: string;
     rating: number;
     price: number;
+    // V3.0.1 任务8: 支持的交付模式
+    deliveryModes?: ('fast' | 'economic')[];
+    leadTimeFast?: number;  // 快速模式交期(天)
+    leadTimeEconomic?: number; // 经济模式交期(天)
+    // V3.0.1 任务17: 阶梯价格
+    priceTiers?: PriceTier[];
 }
 
 export interface AuditLog {
