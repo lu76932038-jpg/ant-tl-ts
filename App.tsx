@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
@@ -59,7 +59,6 @@ const App: React.FC = () => {
                         <Route path="stock/entrylist" element={<EntryList />} /> {/* 入库清单 */}
                         <Route path="stock/purchase-orders" element={<PurchaseOrderList />} /> {/* 采购补货 */}
                         <Route path="stock/product/:sku" element={<ProductDetail />} />
-                        <Route path="stock/command/:sku" element={<StockCommandCenter />} />
 
                         <Route
                             path="train-invoice"
