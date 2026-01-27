@@ -1,218 +1,243 @@
 import React, { useState } from 'react';
-import { Package, RefreshCw, Truck, ShoppingCart, AlertTriangle, CheckCircle, History } from 'lucide-react';
-import { ProductDetailData } from '../types';
+import {
+    Package,
+    RefreshCw,
+    Truck,
+    ShoppingCart,
+    AlertTriangle,
+    CheckCircle,
+    History,
+    CircleDollarSign,
+    Activity,
+    TrendingUp,
+    ChevronUp,
+    ShieldAlert,
+    Info,
+    CalendarDays,
+    ArrowRight
+} from 'lucide-react';
+import { ProductDetailData, SupplierInfo } from '../types';
 
 interface KPISectionProps {
     data: ProductDetailData;
+    supplier?: SupplierInfo | null;
 }
 
-const KPISection: React.FC<KPISectionProps> = ({ data }) => {
-    const [hoveredTurnover, setHoveredTurnover] = useState(false);
-    const [hoveredMom, setHoveredMom] = useState(false);
-    const [hoveredTransit, setHoveredTransit] = useState(false);
+const KPISection: React.FC<KPISectionProps> = ({ data, supplier }) => {
+    const [hoveredCard, setHoveredCard] = useState<number | null>(null);
+
+    // 计算衍生指标
+    const avgDailySales = Math.round(data.kpi.sales30Days / 30);
+    const selectedPrice = supplier?.priceTiers?.find(t => t.isSelected)?.price || supplier?.price || 0;
+    const inventoryValue = Math.round(data.kpi.inStock * selectedPrice);
+
+    const kpis = [
+        {
+            id: 1,
+            label: '在库数量',
+            value: data.kpi.inStock.toLocaleString(),
+            unit: 'PCS',
+            icon: <Package size={20} />,
+            color: 'blue',
+            bgGradient: 'from-blue-50/80 to-white',
+            borderColor: 'border-blue-100/50',
+            accent: 'text-blue-600',
+            detail: `周转 ${data.kpi.turnoverDays} 天`,
+            trend: '+5%',
+            trendDir: 'up',
+            footerIcon: <Package size={140} />,
+            tooltip: {
+                title: '周转天数计算',
+                formula: '当前库存 / (30天销量 / 30)',
+                process: `${data.kpi.inStock} / (${data.kpi.sales30Days} / 30) ≈ ${data.kpi.turnoverDays} 天`
+            }
+        },
+        {
+            id: 2,
+            label: '库存估值',
+            value: inventoryValue > 10000 ? (inventoryValue / 1000).toFixed(1) + 'k' : inventoryValue.toLocaleString(),
+            unit: '¥',
+            icon: <CircleDollarSign size={20} />,
+            color: 'amber',
+            bgGradient: 'from-amber-50/80 to-white',
+            borderColor: 'border-amber-100/50',
+            accent: 'text-amber-600',
+            detail: `单价 ¥${selectedPrice.toFixed(2)}`,
+            trend: 'Live',
+            trendDir: 'neutral',
+            footerIcon: <CircleDollarSign size={140} />,
+            tooltip: {
+                title: '库存资产估值',
+                formula: '在库库存 × 签约单价',
+                process: `${data.kpi.inStock.toLocaleString()} PCS × ¥${selectedPrice.toFixed(2)} = ¥${inventoryValue.toLocaleString()}`
+            }
+        },
+        {
+            id: 3,
+            label: '在途采购',
+            value: data.kpi.inTransit.toLocaleString(),
+            unit: 'PCS',
+            icon: <Truck size={20} />,
+            color: 'indigo',
+            bgGradient: 'from-indigo-50/80 to-white',
+            borderColor: 'border-indigo-100/50',
+            accent: 'text-indigo-600',
+            detail: `${data.kpi.inTransitBatches?.length || 0} 个批次`,
+            trend: 'In Transit',
+            trendDir: 'neutral',
+            footerIcon: <Truck size={140} />,
+            tooltip: {
+                title: '在途批次详情',
+                formula: 'Σ(所有已下单但未入库数量)',
+                process: data.kpi.inTransitBatches && data.kpi.inTransitBatches.length > 0
+                    ? data.kpi.inTransitBatches.map(b => `${b.arrival_date}: ${b.quantity}pcs`).join(', ')
+                    : '暂无在途批次'
+            }
+        },
+        {
+            id: 4,
+            label: '30天销量',
+            value: data.kpi.sales30Days.toLocaleString(),
+            unit: 'PCS',
+            icon: <ShoppingCart size={20} />,
+            color: 'emerald',
+            bgGradient: 'from-emerald-50/80 to-white',
+            borderColor: 'border-emerald-100/50',
+            accent: 'text-emerald-600',
+            detail: '月度销售总量',
+            trend: '-2.4%',
+            trendDir: 'down',
+            footerIcon: <ShoppingCart size={130} />,
+            tooltip: {
+                title: '销售总量统计',
+                formula: '近30个自然日的累计出库实绩',
+                process: `统计区间: ${new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]} 至 今日`
+            }
+        },
+        {
+            id: 5,
+            label: '日均销速',
+            value: avgDailySales.toLocaleString(),
+            unit: 'PCS/D',
+            icon: <Activity size={20} />,
+            color: 'purple',
+            bgGradient: 'from-purple-50/80 to-white',
+            borderColor: 'border-purple-100/50',
+            accent: 'text-purple-600',
+            detail: '基于30日历史计算',
+            trend: 'Stable',
+            trendDir: 'neutral',
+            footerIcon: <Activity size={140} />,
+            tooltip: {
+                title: '日销速 (V-Daily)',
+                formula: '30天销量 / 30',
+                process: `${data.kpi.sales30Days} / 30 ≈ ${avgDailySales} PCS/天`
+            }
+        },
+        {
+            id: 6,
+            label: '缺货风险',
+            value: data.kpi.stockoutRisk,
+            unit: 'LEVEL',
+            icon: <ShieldAlert size={20} />,
+            color: data.kpi.stockoutRisk === '高' ? 'rose' : 'orange',
+            bgGradient: data.kpi.stockoutRisk === '高' ? 'from-rose-50/90 to-white' : 'from-orange-50/80 to-white',
+            borderColor: data.kpi.stockoutRisk === '高' ? 'border-rose-100' : 'border-orange-100/50',
+            accent: data.kpi.stockoutRisk === '高' ? 'text-rose-600' : 'text-orange-600',
+            detail: `支撑 ${data.kpi.turnoverDays} 天`,
+            trend: data.kpi.stockoutRisk === '高' ? 'CRITICAL' : 'MONITOR',
+            trendDir: 'neutral',
+            footerIcon: <ShieldAlert size={140} />,
+            tooltip: {
+                title: '风险等级判定',
+                formula: '周转天数 < 安全周期 ? 高风险 : 低风险',
+                process: `当前周转 ${data.kpi.turnoverDays} 天 | 判定结果: ${data.kpi.stockoutRisk}`
+            }
+        }
+    ];
 
     return (
-        <div className="grid grid-cols-4 gap-6">
-            {/* Card 1: 在手库存 */}
-            <div className="relative bg-gradient-to-br from-blue-50/80 to-white p-6 rounded-[20px] border border-blue-100/50 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(37,99,235,0.1)] hover:-translate-y-1 hover:z-20 transition-all duration-300 group">
-                {/* Decorative Background */}
-                <div className="absolute inset-0 overflow-hidden rounded-[20px] pointer-events-none">
-                    <div className="absolute -right-6 -bottom-6 text-blue-100/50 group-hover:text-blue-100 transition-colors duration-500">
-                        <Package size={120} strokeWidth={1} />
-                    </div>
-                </div>
-                <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-3">
-                        <div className="p-2 bg-white rounded-xl shadow-sm border border-blue-50 text-blue-600">
-                            <Package size={18} />
-                        </div>
-                        <span className="text-sm font-bold text-slate-500 tracking-wide">在库量</span>
-                    </div>
-                    <div className="flex items-baseline gap-2 mb-3">
-                        <span className="text-4xl font-extrabold text-slate-800 tracking-tight font-sans">
-                            {data.kpi.inStock.toLocaleString()}
-                        </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="relative"
-                            onMouseEnter={() => setHoveredTurnover(true)}
-                            onMouseLeave={() => setHoveredTurnover(false)}
-                        >
-                            <span className="px-2.5 py-1 rounded-lg bg-blue-100/50 border border-blue-200/50 text-blue-700 text-xs font-bold flex items-center gap-1 cursor-help group-hover:bg-blue-100 transition-colors">
-                                <RefreshCw size={10} />
-                                周转 {data.kpi.turnoverDays} 天
-                            </span>
-                            {hoveredTurnover && (
-                                <div className="absolute bottom-full left-0 mb-2 p-3 bg-white border border-gray-200 shadow-2xl rounded-xl z-50 w-64 text-xs animate-in fade-in slide-in-from-bottom-2 duration-200 ring-1 ring-black/5">
-                                    <div className="font-bold text-gray-700 mb-1 flex items-center gap-1">
-                                        <RefreshCw size={12} className="text-blue-600" />
-                                        周转天数计算公式
-                                    </div>
-                                    <div className="text-gray-500 mb-2 leading-relaxed">
-                                        当前库存 / (30天销量 / 30)<br />
-                                        体现库存可支撑当前销售的天数
-                                    </div>
-                                    <div className="bg-slate-50 p-2 rounded border border-slate-100 font-mono select-all cursor-text text-slate-700 flex flex-col gap-1">
-                                        <div className="text-[10px] text-slate-400">点击下方数值可复制:</div>
-                                        <div className="font-bold">{data.kpi.inStock} / ({data.kpi.sales30Days} / 30) ≈ {data.kpi.turnoverDays}</div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        <div className="relative group">
-                            <span
-                                className="text-xs font-bold text-slate-500 bg-slate-100/50 px-2.5 py-1 rounded-lg border border-slate-200/50 cursor-help transition-all hover:bg-slate-100 flex items-center gap-1"
-                                onMouseEnter={() => setHoveredMom(true)}
-                                onMouseLeave={() => setHoveredMom(false)}
-                            >
-                                环比 +5%
-                            </span>
-                            {hoveredMom && (
-                                <div className="absolute top-full left-0 mt-2 p-3 bg-white border border-gray-200 shadow-2xl rounded-xl z-50 w-64 text-xs animate-in fade-in slide-in-from-top-2 duration-200 ring-1 ring-black/5 origin-top-left">
-                                    <div className="font-bold text-gray-700 mb-1 flex items-center gap-1">
-                                        <History size={12} className="text-slate-600" />
-                                        环比增长计算公式
-                                    </div>
-                                    <div className="text-gray-500 mb-2 leading-relaxed text-left">
-                                        ((本月销量 - 上月销量) / 上月销量) * 100%
-                                    </div>
-                                    <div className="bg-slate-50 p-2 rounded border border-slate-100 font-mono text-slate-700 text-left">
-                                        ((1200 - 1140) / 1140) * 100% ≈ 5%
-                                    </div>
-                                </div>
-                            )}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {kpis.map((kpi, index) => (
+                <div
+                    key={kpi.id}
+                    onMouseEnter={() => setHoveredCard(kpi.id)}
+                    onMouseLeave={() => setHoveredCard(null)}
+                    className={`relative overflow-visible bg-gradient-to-br ${kpi.bgGradient} p-4 rounded-xl border ${kpi.borderColor} shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 cursor-help group
+                        ${hoveredCard === kpi.id ? 'z-[60]' : 'z-10'}
+                    `}
+                >
+                    {/* Compact Artistic Choice: Smaller background icon */}
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-xl">
+                        <div className={`absolute -right-3 -bottom-4 opacity-[0.08] group-hover:opacity-[0.15] group-hover:scale-110 transition-all duration-700 ${kpi.accent}`}>
+                            {React.cloneElement(kpi.footerIcon as React.ReactElement, { size: 80 } as any)}
                         </div>
                     </div>
-                </div>
-            </div>
 
-            {/* Card 2: 在途采购 */}
-            <div className="relative bg-gradient-to-br from-indigo-50/80 to-white p-6 rounded-[20px] border border-indigo-100/50 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(79,70,229,0.1)] hover:-translate-y-1 hover:z-20 transition-all duration-300 group">
-                <div className="absolute inset-0 overflow-hidden rounded-[20px] pointer-events-none">
-                    <div className="absolute -right-6 -bottom-6 text-indigo-100/50 group-hover:text-indigo-100 transition-colors duration-500">
-                        <Truck size={120} strokeWidth={1} />
-                    </div>
-                </div>
-                <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-3">
-                        <div className="p-2 bg-white rounded-xl shadow-sm border border-indigo-50 text-indigo-600">
-                            <Truck size={18} />
-                        </div>
-                        <span className="text-sm font-bold text-slate-500 tracking-wide">在途采购</span>
-                    </div>
-                    <div className="flex items-baseline gap-2 mb-3">
-                        <span className="text-4xl font-extrabold text-slate-800 tracking-tight font-sans">
-                            {data.kpi.inTransit.toLocaleString()}
-                        </span>
-                        <div
-                            className="relative"
-                            onMouseEnter={() => setHoveredTransit(true)}
-                            onMouseLeave={() => setHoveredTransit(false)}
-                        >
-                            <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-indigo-600 text-white shadow-sm shadow-indigo-200 cursor-help">
-                                {data.kpi.inTransitBatches?.length || 0}批次
-                            </span>
-                            {hoveredTransit && data.kpi.inTransitBatches && data.kpi.inTransitBatches.length > 0 && (
-                                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 p-0 bg-white border border-gray-200 shadow-xl rounded-xl z-50 w-72 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                                    <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 font-bold text-xs text-gray-700">在途批次详情</div>
-                                    <div className="max-h-60 overflow-y-auto">
-                                        {data.kpi.inTransitBatches.map((batch, i) => (
-                                            <div key={i} className={`px-3 py-2 border-b border-gray-50 text-xs flex justify-between items-center ${batch.isOverdue ? 'bg-red-50/50' : ''}`}>
-                                                <div>
-                                                    <div className="font-mono text-gray-500 text-[10px]">{batch.arrival_date} 预计到货</div>
-                                                    <div className="font-bold text-gray-800">Qty: {batch.quantity}</div>
-                                                </div>
-                                                {batch.isOverdue ? (
-                                                    <span className="px-1.5 py-0.5 bg-red-100 text-red-600 rounded text-[10px] font-bold">
-                                                        逾期 {batch.overdueDays} 天
-                                                    </span>
-                                                ) : (
-                                                    <span className="px-1.5 py-0.5 bg-green-100 text-green-600 rounded text-[10px] font-bold">
-                                                        正常
-                                                    </span>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="px-2.5 py-1 rounded-lg bg-indigo-100/50 border border-indigo-200/50 text-indigo-700 text-xs font-bold flex items-center gap-1">
-                            <History size={10} />
-                            预计到达: {data.kpi.inTransitBatches && data.kpi.inTransitBatches.length > 0 ? (() => {
-                                const next = [...data.kpi.inTransitBatches].sort((a, b) => new Date(a.arrival_date).getTime() - new Date(b.arrival_date).getTime())[0];
-                                const d = new Date(next.arrival_date);
-                                return `${d.getMonth() + 1}月${d.getDate()}日` + (next.isOverdue ? ' (逾期)' : '');
-                            })() : '无'}
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Card 3: 30天销量 (使用 Emerald 呼应"殸木"品牌色) */}
-            <div className="relative bg-gradient-to-br from-emerald-50/80 to-white p-6 rounded-[20px] border border-emerald-100/50 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(16,185,129,0.1)] hover:-translate-y-1 hover:z-20 transition-all duration-300 group">
-                <div className="absolute inset-0 overflow-hidden rounded-[20px] pointer-events-none">
-                    <div className="absolute -right-6 -bottom-6 text-emerald-100/50 group-hover:text-emerald-100 transition-colors duration-500">
-                        <ShoppingCart size={110} strokeWidth={1} />
-                    </div>
-                </div>
-                <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-3">
-                        <div className="p-2 bg-white rounded-xl shadow-sm border border-emerald-50 text-emerald-600">
-                            <ShoppingCart size={18} />
-                        </div>
-                        <span className="text-sm font-bold text-slate-500 tracking-wide">30天销量</span>
-                    </div>
-                    <div className="flex items-baseline gap-2 mb-3">
-                        <span className="text-4xl font-extrabold text-slate-800 tracking-tight font-sans">
-                            {data.kpi.sales30Days.toLocaleString()}
-                        </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="flex items-center gap-1 text-xs font-bold text-rose-500 bg-rose-50 border border-rose-100 px-2 py-1 rounded-lg">
-                            <svg className="w-3 h-3 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
-                            2.4%
-                        </span>
-                        <span className="text-xs font-medium text-slate-400">环比上月</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Card 4: 缺货风险 */}
-            <div className={`relative p-6 rounded-[20px] border shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:-translate-y-1 hover:z-20 transition-all duration-300 group
-                ${data.kpi.stockoutRisk === '高'
-                    ? 'bg-gradient-to-br from-rose-50/90 to-white border-rose-100 hover:shadow-[0_8px_30px_rgba(244,63,94,0.15)] ring-1 ring-rose-200/50'
-                    : 'bg-gradient-to-br from-orange-50/80 to-white border-orange-100 hover:shadow-[0_8px_30px_rgba(249,115,22,0.1)]'}
-            `}>
-                <div className="absolute inset-0 overflow-hidden rounded-[20px] pointer-events-none">
-                    <div className={`absolute -right-6 -bottom-6 transition-colors duration-500 ${data.kpi.stockoutRisk === '高' ? 'text-rose-100' : 'text-orange-100/50 group-hover:text-orange-100'}`}>
-                        <AlertTriangle size={120} strokeWidth={1} />
-                    </div>
-                </div>
-                <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-3">
-                        <div className={`p-2 bg-white rounded-xl shadow-sm border ${data.kpi.stockoutRisk === '高' ? 'border-rose-100 text-rose-600' : 'border-orange-50 text-orange-600'}`}>
-                            <AlertTriangle size={18} />
-                        </div>
-                        <span className="text-sm font-bold text-slate-500 tracking-wide">缺货风险</span>
-                    </div>
-                    <div className="flex items-baseline gap-2 mb-3">
-                        <span className={`text-4xl font-extrabold tracking-tight font-sans ${data.kpi.stockoutRisk === '高' ? 'text-rose-600' : 'text-slate-800'}`}>
-                            {data.kpi.stockoutRisk}
-                        </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1
-                            ${data.kpi.stockoutRisk === '高' ? 'bg-rose-100/50 border-rose-200/50 text-rose-700' : 'bg-orange-100/50 border-orange-200/50 text-orange-700'}
+                    {/* Tooltip Popup (Keep Downwards) */}
+                    {hoveredCard === kpi.id && kpi.tooltip && (
+                        <div className={`absolute top-[calc(100%+8px)] w-64 bg-slate-900/95 backdrop-blur-xl text-white p-3 rounded-xl shadow-xl z-[100] animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 cursor-text select-text pointer-events-auto
+                            ${index < 3 ? 'left-0 origin-top-left' : 'right-0 origin-top-right'}
                         `}>
-                            <CheckCircle size={10} />
-                            可售 {data.kpi.turnoverDays} 天
-                        </span>
+                            <div className="flex items-center gap-1.5 mb-2 pb-2 border-b border-white/10">
+                                <Info size={12} className={kpi.accent} />
+                                <span className="text-[10px] font-black uppercase tracking-wider">{kpi.tooltip.title}</span>
+                            </div>
+                            <div className="space-y-2">
+                                <div>
+                                    <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5 text-left">计算公式</p>
+                                    <code className="text-[9px] font-mono p-1 bg-white/5 rounded block border border-white/5 text-emerald-400 text-left">
+                                        {kpi.tooltip.formula}
+                                    </code>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5 text-left">计算过程</p>
+                                    <p className="text-[9px] font-mono leading-relaxed text-slate-200 text-left break-all">
+                                        {kpi.tooltip.process}
+                                    </p>
+                                </div>
+                            </div>
+                            {/* Arrow */}
+                            <div className={`absolute -top-1 w-2 h-2 bg-slate-900/90 rotate-45 ${index < 3 ? 'left-4' : 'right-4'}`} />
+                        </div>
+                    )}
+
+                    <div className="relative z-10 flex items-start justify-between h-full gap-2">
+                        {/* Left: Main Data */}
+                        <div className="flex flex-col justify-between h-full min-h-[60px]">
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5 text-left">{kpi.label}</p>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-xl font-black tracking-tight font-sans text-slate-900 leading-none">
+                                        {kpi.value}
+                                    </span>
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase">{kpi.unit}</span>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-1 mt-auto">
+                                <div className={`size-1.5 rounded-full bg-${kpi.color}-500 animate-pulse`} />
+                                <span className="text-[9px] font-medium text-slate-500 truncate max-w-[80px]">{kpi.detail}</span>
+                            </div>
+                        </div>
+
+                        {/* Right: Icon & Trend */}
+                        <div className="flex flex-col items-end gap-2">
+                            <div className={`p-1.5 bg-white/80 backdrop-blur-sm rounded-lg shadow-sm border border-slate-100 ${kpi.accent}`}>
+                                {React.cloneElement(kpi.icon as React.ReactElement, { size: 16 } as any)}
+                            </div>
+                            <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider
+                                ${kpi.trendDir === 'up' ? 'bg-emerald-50 text-emerald-600' :
+                                    kpi.trendDir === 'down' ? 'bg-rose-50 text-rose-600' :
+                                        'bg-slate-50 text-slate-400'}
+                            `}>
+                                {kpi.trendDir === 'up' && <ChevronUp size={8} />}
+                                {kpi.trend}
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
+            ))}
         </div>
     );
 };

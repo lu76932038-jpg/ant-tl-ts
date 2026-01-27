@@ -19,6 +19,8 @@ import ShipList from './pages/stock/ShipList';
 import EntryList from './pages/stock/EntryList';
 import PurchaseOrderList from './pages/stock/PurchaseOrderList';
 import ProductDetail from './pages/stock/ProductDetail';
+import StockCommandCenter from './pages/stock/StockCommandCenter';
+import DashboardHome from './pages/DashboardHome';
 import InquiryList from './pages/inquiry/InquiryList';
 import InquiryDetail from './pages/inquiry/InquiryDetail';
 
@@ -42,7 +44,7 @@ const App: React.FC = () => {
                             </ProtectedRoute>
                         }
                     >
-                        <Route index element={<InquiryList />} />
+                        <Route index element={<DashboardHome />} />
                         <Route path="inquiry-history" element={<InquiryList />} />
                         <Route path="inquiry/:id" element={<InquiryDetail />} />
                         <Route path="profile" element={<ProfileInfo />} />
@@ -57,6 +59,7 @@ const App: React.FC = () => {
                         <Route path="stock/entrylist" element={<EntryList />} /> {/* 入库清单 */}
                         <Route path="stock/purchase-orders" element={<PurchaseOrderList />} /> {/* 采购补货 */}
                         <Route path="stock/product/:sku" element={<ProductDetail />} />
+                        <Route path="stock/command/:sku" element={<StockCommandCenter />} />
 
                         <Route
                             path="train-invoice"

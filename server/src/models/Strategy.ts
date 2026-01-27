@@ -1,5 +1,6 @@
 import { Pool, RowDataPacket } from 'mysql2/promise';
 import pool from '../config/database';
+import { SupplierStrategyModel } from './SupplierStrategy';
 
 export interface ProductStrategy {
     id?: number;
@@ -111,6 +112,9 @@ export class StrategyModel {
                 );
             `);
             console.log('product_audit_logs table initialized.');
+
+            // 3. supplier_strategies (New normalized tables)
+            await SupplierStrategyModel.initializeTables();
 
         } catch (error) {
             console.error('Error initializing Strategy tables:', error);

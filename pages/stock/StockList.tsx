@@ -1,15 +1,16 @@
 
 import React, { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { StockStatus, Product } from '../../types';
 import { MOCK_PRODUCTS } from './mockData';
-import { Download, Plus, Eye, ChevronLeft, ChevronRight, ChevronDown, Clock, Package } from 'lucide-react';
+import { Download, Plus, Eye, ChevronLeft, ChevronRight, ChevronDown, Clock, Package, Zap } from 'lucide-react';
 import AddProductModal from '../../components/AddProductModal';
 import DownloadOptionsModal from '../../components/DownloadOptionsModal';
 import ShipProductModal from '../../components/ShipProductModal';
 import { api } from '../../services/api';
 
 const StockList: React.FC = () => {
+    const navigate = useNavigate();
     const [products, setProducts] = useState<Product[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -217,6 +218,13 @@ const StockList: React.FC = () => {
                                                     <div className="flex items-center justify-center gap-2">
                                                         <button className="flex items-center justify-center size-9 rounded-lg border border-gray-200 bg-white shadow-sm hover:bg-gray-50 hover:border-gray-300 hover:text-black transition-all" title="查看详情">
                                                             <Eye size={18} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => navigate(`/stock/command/${product.sku}`)}
+                                                            className="flex items-center justify-center size-9 rounded-lg border border-blue-100 bg-blue-50/50 text-blue-600 shadow-sm hover:bg-blue-100 hover:border-blue-300 transition-all"
+                                                            title="备货指挥中心"
+                                                        >
+                                                            <Zap size={18} />
                                                         </button>
                                                         <button
                                                             onClick={() => openShipModal(product)}

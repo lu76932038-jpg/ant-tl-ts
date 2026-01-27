@@ -12,6 +12,8 @@ interface ForecastDataGridProps {
     setForecastOverrides: React.Dispatch<React.SetStateAction<Record<string, number>>>;
     calculatedForecasts: Record<string, number>;
     dayOfWeekFactors?: number[];
+    isSaving?: boolean;
+    onSave?: () => void;
 }
 
 const ForecastDataGrid: React.FC<ForecastDataGridProps> = ({
@@ -21,9 +23,15 @@ const ForecastDataGrid: React.FC<ForecastDataGridProps> = ({
     forecastOverrides,
     setForecastOverrides,
     calculatedForecasts,
-    dayOfWeekFactors = []
+    dayOfWeekFactors = [],
+    isSaving = false,
+    onSave
 }) => {
     const [viewMode, setViewMode] = useState<ViewMode>('monthly');
+
+    // ... (rest of code)
+
+
     const [yearFilter, setYearFilter] = useState<number>(new Date().getFullYear());
 
     // --- Data Transformation Helpers ---

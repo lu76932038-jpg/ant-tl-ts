@@ -1,21 +1,53 @@
 import React, { useState } from 'react';
-import { Settings, RefreshCw, Loader2, Plus, Trash2, Truck, Package, Clock } from 'lucide-react';
+import {
+    Settings,
+    RefreshCw,
+    Loader2,
+    Plus,
+    Trash2,
+    Truck,
+    Package,
+    Clock,
+    Building2,
+    Hash,
+    ChevronRight,
+    CircleDot,
+    DollarSign,
+    Box,
+    ShieldCheck
+} from 'lucide-react';
+import { api } from '@/services/api';
 import { SupplierInfo, PriceTier } from '../types';
 
 interface SupplierCardProps {
+    sku: string;
     supplier: SupplierInfo | null;
     isSaving: boolean;
-    onSave: (newInfo: SupplierInfo) => void;
+    onSave: (newInfo: SupplierInfo) => Promise<void>;
 }
 
-const defaultPriceTiers: PriceTier[] = [
-    { minQty: 1, price: 100, leadTime: 30 },
-];
+const defaultPriceTiers: PriceTier[] = [];
 
-const SupplierCard: React.FC<SupplierCardProps> = ({ supplier, isSaving, onSave }) => {
+const SupplierCard: React.FC<SupplierCardProps> = ({ sku, supplier, isSaving, onSave }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [editInfo, setEditInfo] = useState<SupplierInfo | null>(null);
     const [priceTiers, setPriceTiers] = useState<PriceTier[]>(defaultPriceTiers);
+    const [availableSuppliers, setAvailableSuppliers] = useState<{ name: string, code: string }[]>([]);
+
+    // 加载全量供应商列表
+    React.useEffect(() => {
+        const fetchSuppliers = async () => {
+            try {
+                const result: any = await api.get('/products/suppliers');
+                if (Array.isArray(result)) {
+                    setAvailableSuppliers(result.map(s => ({ name: s.name, code: s.supplier_code || s.code })));
+                }
+            } catch (error) {
+                console.error('Failed to fetch suppliers list:', error);
+            }
+        };
+        fetchSuppliers();
+    }, []);
 
     // 初始化编辑信息
     React.useEffect(() => {
@@ -25,12 +57,38 @@ const SupplierCard: React.FC<SupplierCardProps> = ({ supplier, isSaving, onSave 
         }
     }, [supplier]);
 
+    // 切换供应商时拉取对应策略
+    const fetchSupplierStrategy = async (supplierCode: string) => {
+        try {
+            console.log(`Fetching strategy for sku=${sku}, supplier=${supplierCode}`);
+            const res: any = await api.get(`/products/${sku}/strategy?supplier_code=${supplierCode}`);
+            if (res && res.supplier && res.supplier.priceTiers) {
+                console.log('Found strategy for supplier:', res.supplier);
+                setPriceTiers(res.supplier.priceTiers);
+            } else {
+                console.log('No strategy found for supplier, resetting tiers.');
+                setPriceTiers([]);
+            }
+        } catch (error) {
+            console.error('Error fetching supplier strategy:', error);
+            // 出错时不清空，以免误操作？或者给个提示。这里选择清空以防误导。
+            setPriceTiers([]);
+        }
+    };
+
     if (!supplier || !editInfo) return null;
 
-    const handleSave = () => {
-        if (editInfo) {
-            onSave({ ...editInfo, priceTiers });
-            setIsEditing(false);
+    const handleSave = async () => {
+        const sortedTiers = [...priceTiers].sort((a, b) => a.minQty - b.minQty);
+        await onSave({ ...editInfo, priceTiers: sortedTiers });
+        setIsEditing(false);
+    };
+
+    const handleCancel = () => {
+        setIsEditing(false);
+        if (supplier) {
+            setEditInfo(supplier);
+            setPriceTiers(supplier.priceTiers?.length ? supplier.priceTiers : defaultPriceTiers);
         }
     };
 
@@ -39,245 +97,223 @@ const SupplierCard: React.FC<SupplierCardProps> = ({ supplier, isSaving, onSave 
         setPriceTiers([...priceTiers, {
             minQty: lastTier ? lastTier.minQty + 100 : 1,
             price: lastTier ? Math.round(lastTier.price * 0.95) : 100,
-            leadTime: 30
+            leadTime: lastTier ? lastTier.leadTime : 30,
+            isSelected: false
         }]);
     };
 
     const handleRemoveTier = (index: number) => {
-        if (priceTiers.length > 1) {
-            setPriceTiers(priceTiers.filter((_, i) => i !== index));
+        if (priceTiers.length > 0) {
+            const newTiers = priceTiers.filter((_, i) => i !== index);
+            if (index < priceTiers.length && priceTiers[index].isSelected && newTiers.length > 0) {
+                newTiers[0].isSelected = true;
+            }
+            setPriceTiers(newTiers);
         }
     };
 
-    const handleTierChange = (index: number, field: keyof PriceTier, value: number) => {
+    const handleTierChange = (index: number, field: keyof PriceTier, value: any) => {
         const newTiers = [...priceTiers];
-        newTiers[index] = { ...newTiers[index], [field]: value };
+        if (field === 'isSelected') {
+            newTiers.forEach((t, i) => t.isSelected = (i === index));
+        } else {
+            newTiers[index] = { ...newTiers[index], [field]: value };
+        }
         setPriceTiers(newTiers);
     };
 
     return (
-        <div className="bg-white rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] ring-1 ring-gray-100 overflow-hidden">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/30">
+        <div className="bg-gradient-to-br from-white to-slate-50/50 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] ring-1 ring-slate-100 overflow-hidden">
+            {/* 1. Header Area */}
+            <div className="px-4 border-b border-slate-100/80 flex items-center justify-between bg-white/50 backdrop-blur-sm h-[84px]">
                 <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
-                        <Settings size={18} />
+                    <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg shrink-0">
+                        <Building2 size={16} />
                     </div>
-                    <h3 className="font-bold text-gray-900 text-base">供应商策略设置</h3>
+                    <div className="flex flex-col justify-center gap-0.5 leading-none">
+                        <span className="text-sm font-black text-slate-800">供应商</span>
+                        <span className="text-sm font-black text-slate-800">策略</span>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2">
+
+                <div>
                     {isEditing ? (
-                        <>
-                            <button
-                                onClick={() => setIsEditing(false)}
-                                className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium"
-                            >
+                        <div className="flex flex-col gap-1.5">
+                            <button onClick={handleCancel} className="px-3 py-1 text-[10px] text-slate-500 hover:text-slate-700 font-bold bg-white border border-slate-200 rounded-md shadow-sm transition-all">
                                 取消
                             </button>
-                            <button
-                                onClick={handleSave}
-                                disabled={isSaving}
-                                className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 flex items-center gap-1.5 disabled:opacity-50"
-                            >
-                                {isSaving ? <Loader2 className="animate-spin" size={12} /> : <RefreshCw size={12} />}
-                                保存设置
+                            <button onClick={handleSave} disabled={isSaving} className="px-3 py-1 bg-indigo-600 text-white rounded-md text-[10px] font-bold shadow-sm hover:bg-indigo-700 active:scale-95 disabled:opacity-70 transition-all flex items-center justify-center gap-1">
+                                {isSaving ? <Loader2 className="animate-spin" size={10} /> : <RefreshCw size={10} />}
+                                保存
                             </button>
-                        </>
+                        </div>
                     ) : (
-                        <button
-                            onClick={() => setIsEditing(true)}
-                            className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 hover:text-indigo-600 hover:border-indigo-200 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
-                        >
-                            <RefreshCw size={12} />
-                            编辑设置
+                        <button onClick={() => setIsEditing(true)} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-200 rounded-lg text-xs font-bold shadow-sm active:scale-95 transition-all flex items-center gap-1">
+                            <Settings size={12} />
+                            编辑
                         </button>
                     )}
                 </div>
             </div>
 
-            <div className="p-6 space-y-6">
-                {/* 1. 供应商基本信息 */}
-                <section className="space-y-4">
-                    <div className="flex items-center gap-2">
-                        <div className="w-1 h-4 bg-indigo-500 rounded-full"></div>
-                        <h4 className="text-sm font-bold text-gray-800">供应商信息</h4>
+            <div className={`p-4 space-y-4 transition-all duration-300 ${isEditing ? 'opacity-100' : 'opacity-90'}`}>
+
+                {/* 2. Basic Info - Ultra Compact */}
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-0.5">
+                        <span>供应商</span>
+                        {/* 无论编辑状态与否，都在标题旁显示 Code（如果存在） */}
+                        {editInfo?.code ? <span className="text-indigo-500 font-mono px-1.5 py-0.5 bg-indigo-50 rounded">{editInfo.code}</span> : null}
                     </div>
 
-                    <div className="bg-gray-50 rounded-xl border border-gray-100 p-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">供应商名称</span>
-                                {isEditing ? (
-                                    <input
-                                        className="w-full text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded-lg px-3 py-2 focus:border-indigo-500 focus:outline-none"
-                                        value={editInfo.name}
-                                        onChange={e => setEditInfo({ ...editInfo, name: e.target.value })}
-                                    />
-                                ) : (
-                                    <div className="text-sm font-bold text-gray-900">{supplier.name}</div>
-                                )}
+                    {isEditing ? (
+                        <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                            <div className="relative">
+                                <input
+                                    className="w-full text-[11px] font-bold text-slate-700 bg-slate-100/50 border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all pl-8"
+                                    value={editInfo.name}
+                                    placeholder="供应商名称"
+                                    list="supplier-list-full"
+                                    onInput={e => {
+                                        const val = (e.target as HTMLInputElement).value;
+                                        const selected = availableSuppliers.find(s => s.name === val);
+                                        const newCode = selected ? selected.code : editInfo.code;
+
+                                        setEditInfo({
+                                            ...editInfo,
+                                            name: val,
+                                            code: newCode
+                                        });
+
+                                        // 如果选中了已存在的供应商，尝试拉取该供应商的历史策略
+                                        if (selected && selected.code) {
+                                            fetchSupplierStrategy(selected.code);
+                                        }
+                                    }}
+                                />
+                                <Building2 size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <datalist id="supplier-list-full">
+                                    {availableSuppliers.map((s, idx) => (
+                                        <option key={`${s.code}-${idx}`} value={s.name}>
+                                            {s.code}
+                                        </option>
+                                    ))}
+                                </datalist>
                             </div>
-                            <div className="space-y-1">
-                                <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">供应商编码</span>
-                                {isEditing ? (
-                                    <input
-                                        className="w-full text-sm font-mono text-indigo-600 bg-white border border-gray-200 rounded-lg px-3 py-2 focus:border-indigo-500 focus:outline-none"
-                                        value={editInfo.code}
-                                        onChange={e => setEditInfo({ ...editInfo, code: e.target.value })}
-                                    />
-                                ) : (
-                                    <div className="text-sm font-mono text-indigo-600 bg-indigo-50 px-2 py-1 rounded inline-block">{supplier.code}</div>
-                                )}
-                            </div>
+                            {/* 隐藏 Code 输入框，因为已经在标题旁显示，且通过名称自动关联 */}
                         </div>
-                    </div>
-                </section>
+                    ) : (
+                        <div className="p-3 bg-white border border-slate-100 rounded-xl shadow-sm group">
+                            <div className="text-xs font-black text-slate-800 tracking-tight leading-tight">{supplier.name}</div>
 
-                <div className="h-px bg-gray-100"></div>
-
-                {/* 2. 交付模式配置 */}
-                <section className="space-y-4">
-                    <div className="flex items-center gap-2">
-                        <div className="w-1 h-4 bg-blue-500 rounded-full"></div>
-                        <h4 className="text-sm font-bold text-gray-800">交付模式</h4>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className={`bg-blue-50/50 rounded-xl border ${isEditing ? 'border-blue-200' : 'border-blue-100'} p-4 space-y-2`}>
-                            <div className="flex items-center gap-2">
-                                <Truck size={16} className="text-blue-600" />
-                                <span className="text-xs font-bold text-blue-900">快速交付</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Clock size={12} className="text-blue-400" />
-                                {isEditing ? (
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        value={editInfo.leadTimeFast || 7}
-                                        onChange={e => setEditInfo({ ...editInfo, leadTimeFast: parseInt(e.target.value) || 7 })}
-                                        className="w-16 text-sm font-bold text-blue-700 bg-white border border-blue-200 rounded px-2 py-1 focus:border-blue-500 focus:outline-none"
-                                    />
-                                ) : (
-                                    <span className="text-sm font-bold text-blue-700">{supplier.leadTimeFast || 7}</span>
-                                )}
-                                <span className="text-xs text-blue-500">天</span>
-                            </div>
                         </div>
+                    )}
+                </div>
 
-                        <div className={`bg-emerald-50/50 rounded-xl border ${isEditing ? 'border-emerald-200' : 'border-emerald-100'} p-4 space-y-2`}>
-                            <div className="flex items-center gap-2">
-                                <Package size={16} className="text-emerald-600" />
-                                <span className="text-xs font-bold text-emerald-900">经济交付</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <Clock size={12} className="text-emerald-400" />
-                                {isEditing ? (
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        value={editInfo.leadTimeEconomic || 30}
-                                        onChange={e => setEditInfo({ ...editInfo, leadTimeEconomic: parseInt(e.target.value) || 30 })}
-                                        className="w-16 text-sm font-bold text-emerald-700 bg-white border border-emerald-200 rounded px-2 py-1 focus:border-emerald-500 focus:outline-none"
-                                    />
-                                ) : (
-                                    <span className="text-sm font-bold text-emerald-700">{supplier.leadTimeEconomic || 30}</span>
-                                )}
-                                <span className="text-xs text-emerald-500">天</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
 
-                <div className="h-px bg-gray-100"></div>
-
-                {/* 3. 阶梯价格 */}
-                <section className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <div className="w-1 h-4 bg-amber-500 rounded-full"></div>
-                            <h4 className="text-sm font-bold text-gray-800">阶梯价格</h4>
+                {/* 3. Price Tiers - Card Style */}
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between ml-0.5">
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            <DollarSign size={12} className="text-amber-500" />
+                            <span>阶梯价格配置</span>
                         </div>
                         {isEditing && (
                             <button
                                 onClick={handleAddTier}
-                                className="text-xs text-amber-600 font-bold hover:bg-amber-50 px-2 py-1 rounded-lg transition-colors flex items-center gap-1"
+                                className="text-[10px] text-indigo-600 font-black flex items-center gap-0.5 px-2 py-0.5 bg-indigo-50 border border-indigo-100 rounded-full hover:bg-indigo-100 transition-colors"
                             >
-                                <Plus size={12} />
-                                添加阶梯
+                                <Plus size={10} />
+                                添加
                             </button>
                         )}
                     </div>
 
-                    <div className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
-                        {/* 表头 */}
-                        <div className="grid grid-cols-4 gap-2 px-4 py-2 bg-gray-100/50 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                            <div>起订量</div>
-                            <div>单价 (¥)</div>
-                            <div>交期 (天)</div>
-                            {isEditing && <div className="text-center">操作</div>}
+                    <div className="space-y-2">
+                        {/* Header Row - Grid Layout */}
+                        <div className="grid grid-cols-[1fr_1.5fr_0.8fr_0.5fr] gap-2 px-2 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none border-b border-slate-100/50">
+                            <div className="text-right">起订量</div>
+                            <div className="text-right">含税单价</div>
+                            <div className="text-right">货期</div>
+                            <div></div>
                         </div>
 
-                        {/* 价格行 */}
-                        <div className="divide-y divide-gray-100">
-                            {priceTiers.map((tier, index) => (
-                                <div key={index} className="grid grid-cols-4 gap-2 px-4 py-3 items-center">
-                                    <div>
+                        {priceTiers.map((tier, index) => (
+                            <div
+                                key={index}
+                                className="relative group transition-all duration-300 rounded-lg overflow-hidden border border-slate-100 bg-white hover:border-indigo-100"
+                            >
+                                <div className="grid grid-cols-[1fr_1.5fr_0.8fr_0.5fr] gap-2 px-2 h-9 items-center">
+                                    {/* 起订量 */}
+                                    <div className="flex justify-end items-center overflow-hidden">
                                         {isEditing ? (
                                             <input
                                                 type="number"
-                                                min={1}
                                                 value={tier.minQty}
-                                                onChange={e => handleTierChange(index, 'minQty', parseInt(e.target.value) || 1)}
-                                                className="w-full text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded px-2 py-1 focus:border-indigo-500 focus:outline-none"
+                                                onChange={e => handleTierChange(index, 'minQty', parseInt(e.target.value) || 0)}
+                                                className="w-full h-8 bg-transparent transition-all rounded text-[10px] font-bold text-slate-700 font-mono italic text-right focus:outline-none border-transparent hover:border-slate-200 focus:border-indigo-300 border px-1"
                                             />
                                         ) : (
-                                            <span className="text-sm font-medium text-gray-700">≥ {tier.minQty}</span>
+                                            <div className="text-[10px] font-bold text-slate-700 font-mono italic h-8 flex items-center justify-end w-full px-1">
+                                                {Number(tier.minQty).toLocaleString()}
+                                            </div>
                                         )}
                                     </div>
-                                    <div>
+
+                                    {/* 单价 */}
+                                    <div className="flex justify-end items-center overflow-hidden">
                                         {isEditing ? (
                                             <input
-                                                type="number"
-                                                min={0}
-                                                step={0.01}
+                                                type="text"
+                                                inputMode="decimal"
                                                 value={tier.price}
-                                                onChange={e => handleTierChange(index, 'price', parseFloat(e.target.value) || 0)}
-                                                className="w-full text-sm font-bold text-gray-900 bg-white border border-gray-200 rounded px-2 py-1 focus:border-indigo-500 focus:outline-none"
+                                                onChange={e => {
+                                                    const val = e.target.value;
+                                                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                                        handleTierChange(index, 'price', val);
+                                                    }
+                                                }}
+                                                className="w-full h-8 bg-transparent transition-all rounded text-[10px] font-bold font-mono text-slate-800 text-right focus:outline-none border-transparent hover:border-slate-200 focus:border-indigo-300 border px-1"
                                             />
                                         ) : (
-                                            <span className="text-sm font-bold text-gray-900">¥{tier.price.toFixed(2)}</span>
+                                            <span className="text-[10px] font-bold font-mono text-slate-800 h-8 flex items-center justify-end w-full px-1">
+                                                {Number(tier.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </span>
                                         )}
                                     </div>
-                                    <div>
+
+                                    {/* 货期 */}
+                                    <div className="flex justify-end items-center overflow-hidden">
                                         {isEditing ? (
                                             <input
                                                 type="number"
-                                                min={1}
                                                 value={tier.leadTime}
-                                                onChange={e => handleTierChange(index, 'leadTime', parseInt(e.target.value) || 1)}
-                                                className="w-full text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded px-2 py-1 focus:border-indigo-500 focus:outline-none"
+                                                onChange={e => handleTierChange(index, 'leadTime', parseInt(e.target.value) || 0)}
+                                                className="w-full h-8 bg-transparent transition-all rounded text-[10px] font-bold text-slate-700 font-mono text-right focus:outline-none border-transparent hover:border-slate-200 focus:border-indigo-300 border px-1"
                                             />
                                         ) : (
-                                            <span className="text-sm font-medium text-gray-700">{tier.leadTime} 天</span>
+                                            <div className="text-[10px] font-bold text-slate-700 font-mono h-8 flex items-center justify-end w-full px-1">{tier.leadTime}</div>
                                         )}
                                     </div>
-                                    {isEditing && (
-                                        <div className="text-center">
+
+                                    {/* 删除按钮 */}
+                                    <div className="flex justify-end items-center">
+                                        {isEditing && (
                                             <button
                                                 onClick={() => handleRemoveTier(index)}
                                                 disabled={priceTiers.length <= 1}
-                                                className="p-1 text-gray-400 hover:text-red-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                                title="删除"
+                                                className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-all disabled:opacity-30 disabled:hover:bg-transparent"
                                             >
-                                                <Trash2 size={14} />
+                                                <Trash2 size={12} />
                                             </button>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
                                 </div>
-                            ))}
-                        </div>
+                            </div>
+                        ))}
                     </div>
-                </section>
+                </div>
             </div>
         </div>
     );

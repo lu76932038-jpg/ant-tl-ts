@@ -60,6 +60,7 @@ export interface PriceTier {
     minQty: number;      // 最小订购量
     price: number;       // 单价
     leadTime: number;    // 交期(天)
+    isSelected?: boolean; // 是否当前备货选择 (任务23)
 }
 
 export interface SupplierInfo {

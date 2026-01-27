@@ -5,6 +5,7 @@ import { ShipListModel } from '../models/ShipList';
 import { StrategyModel } from '../models/Strategy';
 import { EntryListModel } from '../models/EntryList';
 import pool from '../config/database';
+import { SupplierStrategyModel } from '../models/SupplierStrategy';
 import ARIMA from 'arima';
 
 // Define TS interface for chart data
@@ -364,22 +365,39 @@ export class ProductController {
             const { sku } = req.params;
             const body = req.body;
 
-            // Upsert strategy configuration
+            // 1. 保存基础策略配置
             await StrategyModel.upsert({
                 sku,
                 ...body
             });
 
-            // Log action
+            // 2. 如果包含供应商信息，同步保存到规范化物理表
+            if (body.supplier_info) {
+                try {
+                    await SupplierStrategyModel.saveStrategy(sku, body.supplier_info);
+                } catch (supplierErr) {
+                    console.error('Failed to save normalized supplier strategy:', supplierErr);
+                    // 即使物理表写入失败，如果主策略写入成功，我们通常也返回成功，或根据业务决定是否回滚
+                }
+            }
+
+            // 3. 记录审计日志
             await StrategyModel.addLog({
                 sku,
                 action_type: 'UPDATE_STRATEGY',
-                // Use frontend provided log content if available, otherwise default to generic diff
-                content: body.log_content || JSON.stringify({ desc: '更新预测/补货策略配置', diff: body }),
+                content: body.log_content || JSON.stringify({ desc: '更新预测/备货策略及供应商配置', diff: body }),
                 status: 'AUTO_APPROVED'
             });
 
-            res.json({ success: true });
+            // 4. Fetch updated data to return
+            const updatedStrategy = await StrategyModel.findBySku(sku);
+            const updatedSupplier = await SupplierStrategyModel.findFullStrategyBySku(sku);
+
+            res.json({
+                success: true,
+                strategy: updatedStrategy,
+                supplier: updatedSupplier
+            });
         } catch (error) {
             console.error('Error updating strategy:', error);
             res.status(500).json({ error: 'Internal server error' });
@@ -389,14 +407,31 @@ export class ProductController {
     static async getStrategy(req: Request, res: Response) {
         try {
             const { sku } = req.params;
+            const supplierCode = req.query.supplier_code as string | undefined;
+
+            // 1. 尝试从规范化物理表获取供应商策略
+            let supplier = await SupplierStrategyModel.findFullStrategyBySku(sku, supplierCode);
             const strategy = await StrategyModel.findBySku(sku);
 
-            // Should also return supplier info, defaulting if not found
-            // In the frontend it expects { strategy: ..., supplier: ... }
-            // StrategyModel.findBySku returns the strategy row which includes supplier_info JSON
+            // 2. 如果新表没有，但旧表 JSON 有，则执行自动迁移
+            if (!supplier && strategy?.supplier_info) {
+                try {
+                    console.log(`Auto-migrating supplier strategy for SKU: ${sku}`);
+                    const oldJson = typeof strategy.supplier_info === 'string'
+                        ? JSON.parse(strategy.supplier_info)
+                        : strategy.supplier_info;
+
+                    if (oldJson && oldJson.code) {
+                        await SupplierStrategyModel.saveStrategy(sku, oldJson);
+                        // 迁移后重新获取
+                        supplier = await SupplierStrategyModel.findFullStrategyBySku(sku);
+                    }
+                } catch (migrateErr) {
+                    console.error('Auto-migration failed:', migrateErr);
+                }
+            }
 
             if (!strategy) {
-                // Return default skeleton if not found
                 return res.json({
                     strategy: {
                         sku,
@@ -406,12 +441,6 @@ export class ProductController {
                     },
                     supplier: null
                 });
-            }
-
-            // Parse supplier_info if it's a string (though it should be object if using JSON type in newer mysql/driver, but safety first)
-            let supplier = strategy.supplier_info;
-            if (typeof supplier === 'string') {
-                try { supplier = JSON.parse(supplier); } catch { }
             }
 
             res.json({
@@ -432,6 +461,18 @@ export class ProductController {
             res.json(logs);
         } catch (error) {
             console.error('Error fetching logs:', error);
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+
+    static async getSuppliers(req: Request, res: Response) {
+        console.log('GET /api/products/suppliers - Request received');
+        try {
+            const suppliers = await SupplierStrategyModel.getAllSuppliers();
+            console.log(`GET /api/products/suppliers - Found ${suppliers.length} suppliers`);
+            res.json(suppliers);
+        } catch (error) {
+            console.error('Error fetching suppliers:', error);
             res.status(500).json({ error: 'Internal server error' });
         }
     }

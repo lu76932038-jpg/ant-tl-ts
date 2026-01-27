@@ -237,7 +237,15 @@ const ProductDetail: React.FC = () => {
                 log_content: `更新库存策略配置: 安全库存 ${editSafetyStock} 个月, 补货模式: ${replenishmentMode === 'fast' ? '快速补货(7天)' : '经济补货(30天)'}, 补货方式: ${autoReplenishment ? '自动(' + autoReplenishmentTime + ')' : '手动'}`
             });
             // Refresh data
+            // Refresh data
             setStrategy(result.strategy);
+            if (result.supplier) {
+                setSupplier(result.supplier);
+                setEditSupplierInfo(result.supplier);
+            } else if (supplierToSave) {
+                setSupplier(supplierToSave);
+                setEditSupplierInfo(supplierToSave);
+            }
             fetchLogs(); // Refresh logs to show auto-approval
             // 更新已保存的策略值
             setSavedStrategyValues({
@@ -251,6 +259,19 @@ const ProductDetail: React.FC = () => {
         } finally {
             setIsSaving(false);
         }
+    };
+
+    // V3.0.1 任务：阶梯价格联动选择
+    const handleSelectTier = (tierIndex: number) => {
+        if (!editSupplierInfo?.priceTiers) return;
+        const newTiers = editSupplierInfo.priceTiers.map((t, idx) => ({
+            ...t,
+            isSelected: idx === tierIndex
+        }));
+        setEditSupplierInfo({
+            ...editSupplierInfo,
+            priceTiers: newTiers
+        });
     };
 
 
@@ -740,13 +761,14 @@ const ProductDetail: React.FC = () => {
             <main className="flex-1 overflow-y-auto custom-scrollbar print:overflow-visible">
                 <div className="max-w-[1440px] mx-auto px-8 py-8 space-y-8">
                     {/* KPI Cards */}
-                    <KPISection data={data} />
+                    <KPISection data={data} supplier={supplier} />
 
                     {/* Main Content Grid */}
-                    <div className="grid grid-cols-12 gap-10 items-start">
+                    {/* Main Content Grid (1:4:1 Ratio -> 2:8:2 cols) */}
+                    <div className="grid grid-cols-12 gap-6 items-start">
 
-                        {/* Left Column: Configuration (4 cols) - Sticky */}
-                        <div className="col-span-4 space-y-6 sticky top-[100px] self-start">
+                        {/* Left Column: Configuration (2 cols) - Sticky */}
+                        <div className="col-span-2 space-y-6 sticky top-[100px] self-start">
 
                             {/* 0. Sales Forecast Config */}
                             {/* 0. Sales Forecast Config */}
@@ -775,9 +797,62 @@ const ProductDetail: React.FC = () => {
                                 setRatioAdjustment={setRatioAdjustment}
                             />
 
-                            {/* 1. Inventory Strategy Config */}
+                            {/* 2. Dead Stock Config (Moved from Right) */}
+                            <DeadStockConfig />
 
-                            {/* 1. Inventory Strategy Config */}
+                        </div>
+                        {/* Middle Column: Visuals & Logs (8 cols) */}
+                        <div className="col-span-8 space-y-6">
+
+                            {/* 2. Forecast Data Adjustment (New) */}
+                            <ForecastDataGrid
+                                isOpen={isForecastTableOpen}
+                                onToggle={() => setIsForecastTableOpen(!isForecastTableOpen)}
+                                forecastGrid={forecastGrid}
+                                forecastOverrides={forecastOverrides}
+                                setForecastOverrides={setForecastOverrides}
+                                calculatedForecasts={calculatedForecasts}
+                                dayOfWeekFactors={dayOfWeekFactors}
+                                isSaving={isSaving}
+                                onSave={() => handleSaveStrategy()}
+                            />
+
+                            {/* 1. Main Forecast & Inventory Simulation Chart - Nano Design Refactor */}
+                            <SalesForecastChart
+                                displayData={displayData}
+                                viewDimension={viewDimension}
+                                setViewDimension={setViewDimension}
+                                onExport={handleExportExcel}
+                                nowLabel={nowLabel}
+                            />
+                            {/* 3. Inventory Trend Simulation (Sawtooth) */}
+                            {(() => {
+                                // Calculate dynamic lead time for simulation
+                                const selectedTier = editSupplierInfo?.priceTiers?.find(t => t.isSelected);
+                                const effectiveLeadTime = selectedTier ? selectedTier.leadTime : (
+                                    replenishmentMode === 'fast' ? 7 : 30
+                                );
+
+                                return (
+                                    <InventorySimChart
+                                        data={data}
+                                        editSafetyStock={editSafetyStock}
+                                        currentLeadTime={effectiveLeadTime}
+                                        eoq={strategy?.eoq || 500}
+                                        dayOfWeekFactors={dayOfWeekFactors}
+                                        forecastOverrides={forecastOverrides}
+                                        calculatedForecasts={calculatedForecasts}
+                                    />
+                                );
+                            })()}
+
+                            {/* 4. Operation Logs */}
+                            <OperationLogs logs={logs} />
+                        </div>
+
+                        {/* Right Column: Execute & Strategy (2 cols) - Sticky */}
+                        <div className="col-span-2 space-y-6 sticky top-[100px] self-start">
+                            {/* 1. Inventory Strategy Config (Moved to Right Top) */}
                             <InventoryStrategy
                                 data={data}
                                 strategy={strategy}
@@ -792,59 +867,19 @@ const ProductDetail: React.FC = () => {
                                 onCreatePO={handleCreatePO}
                                 hasUnsavedChanges={hasUnsavedChanges}
                                 supplier={editSupplierInfo}
+                                onSelectTier={handleSelectTier}
                                 autoReplenishment={autoReplenishment}
                                 setAutoReplenishment={setAutoReplenishment}
                                 autoReplenishmentTime={autoReplenishmentTime}
                                 setAutoReplenishmentTime={setAutoReplenishmentTime}
-                            />      {/* 2. Supplier Card (Refactored for Edit) */}
-                            {/* 2. Supplier Card */}
+                            />
+                            {/* 2. Supplier Card (Moved from Left) */}
                             <SupplierCard
-                                supplier={editSupplierInfo}
+                                sku={data.basic.sku}
+                                supplier={supplier}
                                 isSaving={isSaving}
-                                onSave={(newInfo) => {
-                                    setEditSupplierInfo(newInfo); // Optimistic update or state sync
-                                    handleSaveStrategy(newInfo); // Save to backend
-                                }}
+                                onSave={handleSaveStrategy}
                             />
-
-                            {/* 3. Dead Stock Config */}
-                            <DeadStockConfig />
-                        </div>
-                        {/* Right Column: Visuals & Logs (8 cols) */}
-                        <div className="col-span-8 space-y-6">
-
-                            {/* 2. Forecast Data Adjustment (New) */}
-                            <ForecastDataGrid
-                                isOpen={isForecastTableOpen}
-                                onToggle={() => setIsForecastTableOpen(!isForecastTableOpen)}
-                                forecastGrid={forecastGrid}
-                                forecastOverrides={forecastOverrides}
-                                setForecastOverrides={setForecastOverrides}
-                                calculatedForecasts={calculatedForecasts}
-                                dayOfWeekFactors={dayOfWeekFactors}
-                            />
-
-                            {/* 1. Main Forecast & Inventory Simulation Chart - Nano Design Refactor */}
-                            <SalesForecastChart
-                                displayData={displayData}
-                                viewDimension={viewDimension}
-                                setViewDimension={setViewDimension}
-                                onExport={handleExportExcel}
-                                nowLabel={nowLabel}
-                            />
-                            {/* 3. Inventory Trend Simulation (Sawtooth) */}
-                            <InventorySimChart
-                                data={data}
-                                editSafetyStock={editSafetyStock}
-                                currentLeadTime={currentLeadTime}
-                                eoq={strategy?.eoq || 500}
-                                dayOfWeekFactors={dayOfWeekFactors}
-                                forecastOverrides={forecastOverrides}
-                                calculatedForecasts={calculatedForecasts}
-                            />
-
-                            {/* 4. Operation Logs */}
-                            <OperationLogs logs={logs} />
                         </div>
                     </div>
                 </div>

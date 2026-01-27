@@ -41,21 +41,21 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         if (filteredPayload.length === 0) return null;
 
         return (
-            <div className="bg-white/95 backdrop-blur-2xl border border-white/20 p-4 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] min-w-[200px]">
-                <p className="font-mono text-xs font-bold text-gray-400 mb-3 tracking-wider uppercase border-b border-gray-100 pb-2">{label}</p>
-                <div className="space-y-2">
+            <div className="bg-white/95 backdrop-blur-2xl border border-white/20 p-5 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] min-w-[220px]">
+                <p className="font-mono text-[10px] font-black text-gray-400 mb-4 tracking-widest uppercase border-b border-gray-100 pb-3">{label}</p>
+                <div className="space-y-3">
                     {filteredPayload.map((p: any) => (
-                        <div key={p.name} className="flex items-center gap-3 justify-between">
-                            <div className="flex items-center gap-2">
-                                <div className="w-1.5 h-1.5 rounded-full shadow-sm" style={{ backgroundColor: p.color || p.fill }} />
-                                <span className="text-[11px] font-medium text-gray-500">{p.name}</span>
+                        <div key={p.name} className="flex items-center gap-4 justify-between">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: p.color || p.fill }} />
+                                <span className="text-xs font-bold text-gray-500">{p.name}</span>
                             </div>
-                            <span className="font-mono text-xs font-bold text-gray-700">
+                            <span className="font-mono text-xs font-black text-gray-900">
                                 {p.dataKey === 'forecastRemainder'
                                     ? (p.payload.forecastQty ? p.payload.forecastQty.toLocaleString() : 0)
                                     : (typeof p.value === 'number' ? p.value.toLocaleString() : p.value)
                                 }
-                                {p.name.includes('金额') && <span className="text-[9px] text-gray-400 ml-0.5">¥</span>}
+                                {p.name.includes('金额') && <span className="text-[10px] text-gray-400 ml-1">¥</span>}
                             </span>
                         </div>
                     ))}
@@ -136,40 +136,40 @@ const SalesForecastChart: React.FC<SalesForecastChartProps> = ({
                 <div className="flex items-center gap-6">
                     <div
                         onClick={() => setVisibleSeries({ ...visibleSeries, qty: !visibleSeries.qty })}
-                        className={`group flex items-center gap-3 cursor-pointer py-2 px-3 rounded-xl transition-all duration-300 border ${visibleSeries.qty ? 'bg-blue-50/50 border-blue-100' : 'bg-transparent border-transparent hover:bg-gray-50'}`}
+                        className={`group flex items-center gap-3 cursor-pointer py-2 px-3 rounded-2xl transition-all duration-300 border-2 ${visibleSeries.qty ? 'bg-black border-black shadow-lg shadow-gray-200' : 'bg-white border-gray-100 hover:border-gray-200'}`}
                     >
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${visibleSeries.qty ? 'bg-blue-500 text-white shadow-blue-200 shadow-lg' : 'bg-gray-100 text-gray-400'}`}>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${visibleSeries.qty ? 'bg-white/10 text-white' : 'bg-gray-50 text-gray-400'}`}>
                             <Package size={18} />
                         </div>
-                        <div className="flex flex-col">
-                            <span className={`text-[10px] font-bold uppercase tracking-wider ${visibleSeries.qty ? 'text-blue-600' : 'text-gray-400'}`}>数量</span>
-                            <span className={`text-xs font-bold ${visibleSeries.qty ? 'text-gray-900' : 'text-gray-400'}`}>出库数量</span>
+                        <div className="flex flex-col pr-2">
+                            <span className={`text-[9px] font-black uppercase tracking-widest ${visibleSeries.qty ? 'text-blue-400' : 'text-gray-400'}`}>QUANTITY</span>
+                            <span className={`text-xs font-black ${visibleSeries.qty ? 'text-white' : 'text-gray-900'}`}>出库数量</span>
                         </div>
                     </div>
 
                     <div
                         onClick={() => setVisibleSeries({ ...visibleSeries, amount: !visibleSeries.amount })}
-                        className={`group flex items-center gap-3 cursor-pointer py-2 px-3 rounded-xl transition-all duration-300 border ${visibleSeries.amount ? 'bg-emerald-50/50 border-emerald-100' : 'bg-transparent border-transparent hover:bg-gray-50'}`}
+                        className={`group flex items-center gap-3 cursor-pointer py-2 px-3 rounded-2xl transition-all duration-300 border-2 ${visibleSeries.amount ? 'bg-emerald-600 border-emerald-600 shadow-lg shadow-emerald-100' : 'bg-white border-gray-100 hover:border-gray-200'}`}
                     >
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${visibleSeries.amount ? 'bg-emerald-500 text-white shadow-emerald-200 shadow-lg' : 'bg-gray-100 text-gray-400'}`}>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${visibleSeries.amount ? 'bg-white/10 text-white' : 'bg-gray-50 text-gray-400'}`}>
                             <ShoppingCart size={18} />
                         </div>
-                        <div className="flex flex-col">
-                            <span className={`text-[10px] font-bold uppercase tracking-wider ${visibleSeries.amount ? 'text-emerald-600' : 'text-gray-400'}`}>金额</span>
-                            <span className={`text-xs font-bold ${visibleSeries.amount ? 'text-gray-900' : 'text-gray-400'}`}>销售金额</span>
+                        <div className="flex flex-col pr-2">
+                            <span className={`text-[9px] font-black uppercase tracking-widest ${visibleSeries.amount ? 'text-emerald-200' : 'text-gray-400'}`}>REVENUE</span>
+                            <span className={`text-xs font-black ${visibleSeries.amount ? 'text-white' : 'text-gray-900'}`}>销售金额</span>
                         </div>
                     </div>
 
                     <div
                         onClick={() => setVisibleSeries({ ...visibleSeries, customers: !visibleSeries.customers })}
-                        className={`group flex items-center gap-3 cursor-pointer py-2 px-3 rounded-xl transition-all duration-300 border ${visibleSeries.customers ? 'bg-orange-50/50 border-orange-100' : 'bg-transparent border-transparent hover:bg-gray-50'}`}
+                        className={`group flex items-center gap-3 cursor-pointer py-2 px-3 rounded-2xl transition-all duration-300 border-2 ${visibleSeries.customers ? 'bg-orange-500 border-orange-500 shadow-lg shadow-orange-100' : 'bg-white border-gray-100 hover:border-gray-200'}`}
                     >
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${visibleSeries.customers ? 'bg-orange-500 text-white shadow-orange-200 shadow-lg' : 'bg-gray-100 text-gray-400'}`}>
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${visibleSeries.customers ? 'bg-white/10 text-white' : 'bg-gray-50 text-gray-400'}`}>
                             <TruckIcon size={18} />
                         </div>
-                        <div className="flex flex-col">
-                            <span className={`text-[10px] font-bold uppercase tracking-wider ${visibleSeries.customers ? 'text-orange-600' : 'text-gray-400'}`}>成交</span>
-                            <span className={`text-xs font-bold ${visibleSeries.customers ? 'text-gray-900' : 'text-gray-400'}`}>客户数量</span>
+                        <div className="flex flex-col pr-2">
+                            <span className={`text-[9px] font-black uppercase tracking-widest ${visibleSeries.customers ? 'text-orange-100' : 'text-gray-400'}`}>CUSTOMERS</span>
+                            <span className={`text-xs font-black ${visibleSeries.customers ? 'text-white' : 'text-gray-900'}`}>客户统计</span>
                         </div>
                     </div>
                 </div>
@@ -373,8 +373,6 @@ const SalesForecastChart: React.FC<SalesForecastChartProps> = ({
                                         }}
                                     />
                                 )}
-
-
                             </ComposedChart>
                         </ResponsiveContainer>
                     </div>

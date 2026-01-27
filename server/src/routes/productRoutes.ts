@@ -3,6 +3,7 @@ import { ProductController } from '../controllers/productController';
 
 const router = express.Router();
 
+router.get('/suppliers', ProductController.getSuppliers as unknown as express.RequestHandler);
 router.get('/:sku/detail', ProductController.getDetail as unknown as express.RequestHandler);
 router.get('/:sku/strategy', ProductController.getStrategy as unknown as express.RequestHandler);
 router.get('/:sku/logs', ProductController.getLogs as unknown as express.RequestHandler);
