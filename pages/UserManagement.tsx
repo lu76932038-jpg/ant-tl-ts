@@ -36,6 +36,7 @@ const UserManagement: React.FC = () => {
     const AVAILABLE_PERMISSIONS = [
         { key: 'inquiry_parsing', label: '询价解析' },
         { key: 'at_orders', label: 'A&T 订单' },
+        { key: 'stock_list', label: '备货小助手' },
         { key: 'train_invoice', label: '高铁发票助手' },
         { key: 'profile', label: '个人中心(基本信息)' },
         { key: 'change_password', label: '个人中心(修改密码)' },
