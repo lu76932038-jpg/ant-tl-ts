@@ -101,6 +101,7 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
     const leadTimeForCalc = selectedTierIndex !== -1 ? supplier!.priceTiers![selectedTierIndex].leadTime : currentLeadTime;
 
     const ropValue = data ? Math.round(ssValue + (daily * leadTimeForCalc) - data.kpi.inTransit) : 0;
+    const unit = data?.basic.unit || 'PCS';
 
     const Tooltip = ({ title, formula, calc }: { title: string, formula: string, calc: string }) => (
         <div className="absolute bottom-full right-0 mb-2 w-[240px] bg-slate-800 text-white p-2.5 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 ring-1 ring-white/10 pointer-events-none">
@@ -179,7 +180,7 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
                         <span className="text-[10px] font-bold text-slate-500 uppercase">安全库存</span>
                     </div>
                     <div className="text-sm font-mono font-black text-blue-700 pl-0.5">
-                        {ssValue.toLocaleString()} <span className="text-[9px] font-bold opacity-70">PCS</span>
+                        {ssValue.toLocaleString()} <span className="text-[9px] font-bold opacity-70">{unit}</span>
                     </div>
                     <Tooltip
                         title="安全库存计算"
@@ -224,7 +225,7 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">订货点（ROP）</span>
                     </div>
                     <div className="text-sm font-mono font-black text-orange-700 pl-0.5">
-                        {ropValue.toLocaleString()} <span className="text-[9px] font-bold opacity-70">PCS</span>
+                        {ropValue.toLocaleString()} <span className="text-[9px] font-bold opacity-70">{unit}</span>
                     </div>
                     <Tooltip
                         title="ROP 计算逻辑"

@@ -81,6 +81,7 @@ app.use('/api/products', authenticate, standardLimiter, requirePermission('stock
 app.use('/api/purchase-orders', authenticate, standardLimiter, requirePermission('stock_list'), purchaseOrderRoutes);
 app.use('/api/strategies', authenticate, standardLimiter, requirePermission('stock_list'), strategyRoutes);
 app.use('/api/inquiry', authenticate, inquiryLimiter, requirePermission('inquiry_parsing'), inquiryRoutes);
+app.use('/api/entry-list', authenticate, standardLimiter, requirePermission('stock_list'), entryListRoutes);
 
 // Database Initialization (assuming initAdminUser and StockModel.initializeTable exist elsewhere or will be added)
 const initDB = async () => {

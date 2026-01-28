@@ -60,6 +60,41 @@ export class ProductController {
                 [sku]
             );
 
+            // 2.2 Strategy Config (ROP, EOQ) - Moved up to determine lookback depth
+            let strategy = await StrategyModel.findBySku(sku);
+            // Default strategy if missing
+            if (!strategy) {
+                strategy = {
+                    sku, forecast_cycle: 6, safety_stock_days: 0.6, service_level: 0.95, rop: 330, eoq: 1500
+                };
+            }
+
+            // [New] Dynamically determine lookback interval based on strategy or forecast settings
+            let lookbackMonths = 24;
+            if (strategy) {
+                // If YoY: back to 1/2/3 years + 2 month buffer
+                if (strategy.benchmark_type === 'yoy') {
+                    lookbackMonths = Math.max(lookbackMonths, (strategy.yoy_range || 1) * 12 + 2);
+                }
+                // If MoM: back to range + 2 month buffer
+                else if (strategy.benchmark_type === 'mom') {
+                    lookbackMonths = Math.max(lookbackMonths, (strategy.mom_range || 6) + 2);
+                }
+            }
+
+            // 2.1.a [New] Fetch Real Daily Actuals (Dynamic Interval)
+            const [dailyActuals] = await pool.execute<RowDataPacket[]>(
+                `SELECT 
+                    DATE_FORMAT(outbound_date, '%Y-%m-%d') as date,
+                    SUM(quantity) as qty
+                 FROM shiplist
+                 WHERE product_model = ?
+                   AND outbound_date >= DATE_SUB(CURDATE(), INTERVAL ? MONTH)
+                 GROUP BY outbound_date
+                 ORDER BY outbound_date ASC`,
+                [sku, lookbackMonths]
+            );
+
             // 2.1.b [New] Calculate Weekday Seasonality (Last 12 months)
             // 0=Mon, 6=Sun in WEEKDAY() - WAIT: MySQL WEEKDAY() 0=Mon, 6=Sun.
             const [seasonality] = await pool.execute<RowDataPacket[]>(
@@ -85,15 +120,6 @@ export class ProductController {
             } else {
                 // Fallback to uniform if no history
                 weekWeights = new Array(7).fill(1 / 7);
-            }
-
-            // 2.2 Strategy Config (ROP, EOQ)
-            let strategy = await StrategyModel.findBySku(sku);
-            // Default strategy if missing
-            if (!strategy) {
-                strategy = {
-                    sku, forecast_cycle: 6, safety_stock_days: 0.6, service_level: 0.95, rop: 330, eoq: 1500
-                };
             }
 
             // 2.3 Future Entry List (Inbound)
@@ -129,9 +155,79 @@ export class ProductController {
             const sales30Days = recentSales[0]?.qty || 0;
             const avgDailySales = sales30Days / 30; // simple avg based on last 30 days
             const turnoverDays = avgDailySales > 0 ? Math.round(product.inStock / avgDailySales) : 999;
+            // Dynamic Risk Calculation (V2.2 Audit Fix Recalibrated)
+            // Logic: Risk is based on the ACTUAL selected supplier lead time.
+            // 1. Fetch full supplier strategy (including tiers)
+            const fullSupplierStrategy = await SupplierStrategyModel.findFullStrategyBySku(sku);
+
+            // 2. Find selected tier's lead time (Fallback to 30 days)
+            let currentLeadTime = 30;
+            // Get current price for fallback
+            let currentPrice = 0;
+            if (fullSupplierStrategy && fullSupplierStrategy.priceTiers) {
+                const selectedTier = fullSupplierStrategy.priceTiers.find((t: any) => t.isSelected);
+                if (selectedTier) {
+                    currentLeadTime = selectedTier.leadTime;
+                    currentPrice = selectedTier.price; // Use tier price if selected
+                }
+            }
+
+            // V3.0.2: FIFO Inventory Valuation
+            let inventoryValue = 0;
+            const valuationDetails: { date: string, qty: number, price: number, type: 'HISTORY' | 'FALLBACK' }[] = [];
+
+            // Fetch RECEIVED entries for FIFO calculation
+            const [receivedEntries] = await pool.execute<RowDataPacket[]>(
+                `SELECT arrival_date, quantity, unit_price 
+                 FROM entry_list 
+                 WHERE sku = ? AND status = 'RECEIVED' 
+                 ORDER BY arrival_date DESC, created_at DESC`,
+                [sku]
+            );
+
+            let remainingStockToValue = product.inStock;
+
+            // 1. Trace back history (FIFO: Newest items = Recent entries)
+            for (const entry of receivedEntries) {
+                if (remainingStockToValue <= 0) break;
+
+                const takeQty = Math.min(remainingStockToValue, entry.quantity);
+                const batchValue = takeQty * Number(entry.unit_price);
+
+                inventoryValue += batchValue;
+                remainingStockToValue -= takeQty;
+
+                valuationDetails.push({
+                    date: new Date(entry.arrival_date).toISOString().split('T')[0],
+                    qty: takeQty,
+                    price: Number(entry.unit_price),
+                    type: 'HISTORY'
+                });
+            }
+
+            // 2. Fallback for remaining stock (if no history found or stock > history)
+            if (remainingStockToValue > 0) {
+                const fallbackValue = remainingStockToValue * Number(currentPrice);
+                inventoryValue += fallbackValue;
+                valuationDetails.push({
+                    date: 'Term-Begin', // 期初/兜底
+                    qty: remainingStockToValue,
+                    price: Number(currentPrice),
+                    type: 'FALLBACK'
+                });
+            }
+
+            // Round final value
+            inventoryValue = Math.round(inventoryValue);
+
+            const safetyStockDays = (strategy.safety_stock_days || 0) * 30;
+
             let stockoutRisk = '低';
-            if (turnoverDays < 15) stockoutRisk = '高';
-            else if (turnoverDays < 45) stockoutRisk = '中';
+            if (turnoverDays < currentLeadTime) {
+                stockoutRisk = '高';
+            } else if (turnoverDays < (currentLeadTime + safetyStockDays)) {
+                stockoutRisk = '中';
+            }
 
             // 2.4 Historical Inbound
             const [inboundHistory] = await pool.execute<RowDataPacket[]>(
@@ -346,10 +442,14 @@ export class ProductController {
                     inStock: product.inStock,
                     inTransit: calculatedInTransit, // 使用动态计算值
                     sales30Days,
+                    forecast30Days: forecastQty[0] || 0, // V3.0.1 New: Next Month Forecast
+                    inventoryValue, // V3.0.2 FIFO Value
+                    valuationDetails, // V3.0.2 Breakdown
                     turnoverDays,
                     stockoutRisk,
                     inTransitBatches,
-                    weekWeights // 0=Mon, 6=Sun
+                    weekWeights, // 0=Mon, 6=Sun
+                    dailyActuals // [NEW] Real daily sales records
                 },
                 charts: chartData
             });

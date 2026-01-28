@@ -17,27 +17,28 @@ export interface Stock {
     inStock: number;
     available: number;
     inTransit: number;
+    unit?: string;
     created_at?: Date;
     updated_at?: Date;
 }
 
 export const INITIAL_STOCK_DATA: Omit<Stock, 'id'>[] = [
-    { sku: 'SKU-102938', name: '无线人体工学鼠标', status: StockStatus.CRITICAL, inStock: 12, available: 8, inTransit: 0 },
-    { sku: 'SKU-554210', name: '机械键盘 Pro 2', status: StockStatus.WARNING, inStock: 45, available: 40, inTransit: 50 },
-    { sku: 'SKU-992100', name: '智能降噪耳机', status: StockStatus.HEALTHY, inStock: 320, available: 310, inTransit: 100 },
-    { sku: 'SKU-112233', name: 'USB-C 数据线套装', status: StockStatus.STAGNANT, inStock: 850, available: 850, inTransit: 0 },
-    { sku: 'SKU-445566', name: '4K 超高清显示器', status: StockStatus.CRITICAL, inStock: 3, available: 1, inTransit: 20 },
-    { sku: 'SKU-778899', name: '蓝牙便携音箱', status: StockStatus.HEALTHY, inStock: 150, available: 145, inTransit: 30 },
-    { sku: 'SKU-234567', name: '平板电脑支架', status: StockStatus.HEALTHY, inStock: 420, available: 410, inTransit: 0 },
-    { sku: 'SKU-890123', name: 'Type-C 扩展坞', status: StockStatus.WARNING, inStock: 18, available: 15, inTransit: 100 },
-    { sku: 'SKU-345678', name: '笔记本散热器', status: StockStatus.HEALTHY, inStock: 210, available: 205, inTransit: 0 },
-    { sku: 'SKU-901234', name: '高清网络摄像头', status: StockStatus.HEALTHY, inStock: 85, available: 80, inTransit: 20 },
-    { sku: 'SKU-567890', name: '游戏手柄 X版', status: StockStatus.STAGNANT, inStock: 350, available: 350, inTransit: 0 },
-    { sku: 'SKU-123789', name: '智能穿戴手环', status: StockStatus.HEALTHY, inStock: 560, available: 550, inTransit: 100 },
-    { sku: 'SKU-654321', name: '便携式SSD 1TB', status: StockStatus.WARNING, inStock: 25, available: 22, inTransit: 60 },
-    { sku: 'SKU-987654', name: '桌面收纳盒', status: StockStatus.HEALTHY, inStock: 1200, available: 1150, inTransit: 0 },
-    { sku: 'SKU-321654', name: '氮化镓充电器 65W', status: StockStatus.HEALTHY, inStock: 280, available: 275, inTransit: 50 },
-    { sku: 'SKU-774411', name: '工业级路由器', status: StockStatus.STAGNANT, inStock: 140, available: 140, inTransit: 0 },
+    { sku: 'SKU-102938', name: '无线人体工学鼠标', status: StockStatus.CRITICAL, inStock: 12, available: 8, inTransit: 0, unit: '个' },
+    { sku: 'SKU-554210', name: '机械键盘 Pro 2', status: StockStatus.WARNING, inStock: 45, available: 40, inTransit: 50, unit: '个' },
+    { sku: 'SKU-992100', name: '智能降噪耳机', status: StockStatus.HEALTHY, inStock: 320, available: 310, inTransit: 100, unit: '个' },
+    { sku: 'SKU-112233', name: 'USB-C 数据线套装', status: StockStatus.STAGNANT, inStock: 850, available: 850, inTransit: 0, unit: '套' },
+    { sku: 'SKU-445566', name: '4K 超高清显示器', status: StockStatus.CRITICAL, inStock: 3, available: 1, inTransit: 20, unit: '台' },
+    { sku: 'SKU-778899', name: '蓝牙便携音箱', status: StockStatus.HEALTHY, inStock: 150, available: 145, inTransit: 30, unit: '个' },
+    { sku: 'SKU-234567', name: '平板电脑支架', status: StockStatus.HEALTHY, inStock: 420, available: 410, inTransit: 0, unit: '个' },
+    { sku: 'SKU-890123', name: 'Type-C 扩展坞', status: StockStatus.WARNING, inStock: 18, available: 15, inTransit: 100, unit: '个' },
+    { sku: 'SKU-345678', name: '笔记本散热器', status: StockStatus.HEALTHY, inStock: 210, available: 205, inTransit: 0, unit: '个' },
+    { sku: 'SKU-901234', name: '高清网络摄像头', status: StockStatus.HEALTHY, inStock: 85, available: 80, inTransit: 20, unit: '个' },
+    { sku: 'SKU-567890', name: '游戏手柄 X版', status: StockStatus.STAGNANT, inStock: 350, available: 350, inTransit: 0, unit: '个' },
+    { sku: 'SKU-123789', name: '智能穿戴手环', status: StockStatus.HEALTHY, inStock: 560, available: 550, inTransit: 100, unit: '个' },
+    { sku: 'SKU-654321', name: '便携式SSD 1TB', status: StockStatus.WARNING, inStock: 25, available: 22, inTransit: 60, unit: '个' },
+    { sku: 'SKU-987654', name: '桌面收纳盒', status: StockStatus.HEALTHY, inStock: 1200, available: 1150, inTransit: 0, unit: '套' },
+    { sku: 'SKU-321654', name: '氮化镓充电器 65W', status: StockStatus.HEALTHY, inStock: 280, available: 275, inTransit: 50, unit: '个' },
+    { sku: 'SKU-774411', name: '工业级路由器', status: StockStatus.STAGNANT, inStock: 140, available: 140, inTransit: 0, unit: '台' },
 ];
 
 export class StockModel {
@@ -50,8 +51,8 @@ export class StockModel {
 
     static async create(stock: Omit<Stock, 'id'>): Promise<number> {
         const [result] = await pool.execute<ResultSetHeader>(
-            'INSERT INTO StockList (sku, name, status, inStock, available, inTransit) VALUES (?, ?, ?, ?, ?, ?)',
-            [stock.sku, stock.name, stock.status, stock.inStock, stock.available, stock.inTransit]
+            'INSERT INTO StockList (sku, name, status, inStock, available, inTransit, unit) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [stock.sku, stock.name, stock.status, stock.inStock, stock.available, stock.inTransit, stock.unit || '个']
         );
         return result.insertId;
     }
@@ -72,11 +73,22 @@ export class StockModel {
                         inStock INT DEFAULT 0,
                         available INT DEFAULT 0,
                         inTransit INT DEFAULT 0,
+                        unit VARCHAR(20) DEFAULT '个',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                     )
                 `);
                 console.log('StockList table created successfully');
+            } else {
+                // Migration: Check and add 'unit' column if missing
+                try {
+                    await pool.execute("ALTER TABLE StockList ADD COLUMN unit VARCHAR(20) DEFAULT '个'");
+                    console.log('Added column unit to StockList');
+                } catch (e: any) {
+                    if (e.code !== 'ER_DUP_FIELDNAME') {
+                        // console.error('Migration note:', e.message);
+                    }
+                }
             }
 
             // 检查当前数据量
@@ -95,8 +107,8 @@ export class StockModel {
             if (testSkuRows.length === 0) {
                 console.log('Inserting SKU-TEST into StockList...');
                 await pool.execute(
-                    'INSERT INTO StockList (sku, name, status, inStock, available, inTransit) VALUES (?, ?, ?, ?, ?, ?)',
-                    ['SKU-TEST', '测试产品', StockStatus.HEALTHY, 5000, 4800, 200]
+                    'INSERT INTO StockList (sku, name, status, inStock, available, inTransit, unit) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    ['SKU-TEST', '测试产品', StockStatus.HEALTHY, 5000, 4800, 200, '个']
                 );
             }
 

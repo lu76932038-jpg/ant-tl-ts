@@ -80,6 +80,7 @@ const SidebarLayout: React.FC = () => {
                         { label: '入库清单', path: '/stock/entrylist', icon: <Package className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
                         { label: '出库清单', path: '/stock/outbound', icon: <Truck className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
                         { label: '采购补货', path: '/stock/purchase-orders', icon: <ShoppingCart className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
+                        { label: '操作指引', path: '/stock/help', icon: <BookOpen className="w-4 h-4" /> },
                     ]
                 },
                 { label: '高铁发票助手', path: '/train-invoice', icon: <Train className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'train_invoice' }

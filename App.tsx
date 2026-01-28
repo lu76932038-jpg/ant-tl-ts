@@ -23,6 +23,7 @@ import StockCommandCenter from './pages/stock/StockCommandCenter';
 import DashboardHome from './pages/DashboardHome';
 import InquiryList from './pages/inquiry/InquiryList';
 import InquiryDetail from './pages/inquiry/InquiryDetail';
+import StockHelpCenter from './pages/stock/StockHelpCenter';
 
 const App: React.FC = () => {
     return (
@@ -59,6 +60,7 @@ const App: React.FC = () => {
                         <Route path="stock/entrylist" element={<EntryList />} /> {/* 入库清单 */}
                         <Route path="stock/purchase-orders" element={<PurchaseOrderList />} /> {/* 采购补货 */}
                         <Route path="stock/product/:sku" element={<ProductDetail />} />
+                        <Route path="stock/help" element={<StockHelpCenter />} />
 
                         <Route
                             path="train-invoice"

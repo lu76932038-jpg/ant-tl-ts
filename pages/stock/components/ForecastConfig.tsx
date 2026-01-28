@@ -20,7 +20,7 @@ import MultiThumbSlider from '../../../components/MultiThumbSlider';
 
 interface ForecastConfigProps {
     isSaving: boolean;
-    onRunForecast: () => void;
+    onRunForecast: (overrides?: any) => void;
 
     // Date Range
     selectedStartMonth: string;
@@ -109,8 +109,23 @@ const ForecastConfig: React.FC<ForecastConfigProps> = ({
         setYoyWeightSliders(draftYoyWeight);
 
         setIsEditing(false);
-        // Trigger calculation (might need slight delay to ensure state update, or pass draft values directly if logic supports)
-        setTimeout(() => onRunForecast(), 0);
+
+        // Pass the draft values directly to ensure the API call uses the new config immediately
+        // bypassing React state update latency
+        const updates = {
+            start_year_month: draftStart,
+            forecast_year_month: draftForecast,
+            benchmark_type: draftBenchmark,
+            ratio_adjustment: draftRatio,
+            mom_range: draftMomRange,
+            mom_time_sliders: draftMomTime,
+            mom_weight_sliders: draftMomWeight,
+            yoy_range: draftYoyRange,
+            yoy_weight_sliders: draftYoyWeight
+        };
+
+        // Trigger calculation (allow UI to update state first visually, though logic uses overrides)
+        setTimeout(() => onRunForecast(updates), 0);
     };
 
     const handleCancel = () => {
@@ -234,7 +249,7 @@ const ForecastConfig: React.FC<ForecastConfigProps> = ({
                             onClick={() => isEditing && setDraftBenchmark('yoy')}
                             className={`flex-1 py-1.5 rounded text-[10px] font-bold leading-none transition-all duration-200 ${draftBenchmark === 'yoy' ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:bg-slate-200/50'}`}
                         >
-                            趋势
+                            同比
                         </button>
                     </div>
                 </div>

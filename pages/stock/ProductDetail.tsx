@@ -481,11 +481,13 @@ const ProductDetail: React.FC = () => {
 
     // Forecast Grid Helper
     const getForecastMonths = () => {
-        if (!selectedForecastMonth) return {};
+        if (!selectedForecastMonth || !selectedStartMonth) return {};
         const months: { year: number, month: number, key: string }[] = [];
-        const now = new Date();
-        let current = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        const [startY, startM] = selectedStartMonth.split('-').map(Number);
         const [endY, endM] = selectedForecastMonth.split('-').map(Number);
+
+        let current = new Date(startY, startM - 1, 1);
         const end = new Date(endY, endM - 1, 1);
 
         while (current <= end) {
@@ -508,11 +510,56 @@ const ProductDetail: React.FC = () => {
     const forecastGrid = getForecastMonths();
 
     // Calculation Logic
-    const handleRunForecast = () => {
+    const handleRunForecast = (overrides?: any) => {
         if (!data) return;
         if (!strategy) return;
+
+        // Merge overrides with current state to get the effective config
+        const effectiveConfig = {
+            start_year_month: overrides?.start_year_month ?? selectedStartMonth,
+            forecast_year_month: overrides?.forecast_year_month ?? selectedForecastMonth,
+            benchmark_type: overrides?.benchmark_type ?? benchmarkType,
+            mom_range: overrides?.mom_range ?? momRange,
+            mom_time_sliders: overrides?.mom_time_sliders ?? momTimeSliders,
+            mom_weight_sliders: overrides?.mom_weight_sliders ?? momWeightSliders,
+            yoy_range: overrides?.yoy_range ?? yoyRange,
+            yoy_weight_sliders: overrides?.yoy_weight_sliders ?? yoyWeightSliders,
+            ratio_adjustment: overrides?.ratio_adjustment ?? ratioAdjustment
+        };
+
         const newCalculated: Record<string, number> = {};
-        const forecastMonthsList = getForecastMonths(); // Grouped by year
+        // Re-generate grid based on EFFECTIVE start/end
+        const forecastMonthsList = (() => {
+            // ... Logic duplicated from getForecastMonths but using effective dates ...
+            // Since getForecastMonths relies on state, and we need it inside here, better to pass effective dates to a helper
+            // For simplify, let's reuse getForecastMonths if dates didn't change, or re-calc if they did.
+            // Actually, the grid generation logic is duplicated below. Let's fix this properly.
+            if (overrides?.start_year_month || overrides?.forecast_year_month) {
+                // Re-calc months for the new range
+                const months: { year: number, month: number, key: string }[] = [];
+                const [startY, startM] = effectiveConfig.start_year_month.split('-').map(Number);
+                const [endY, endM] = effectiveConfig.forecast_year_month.split('-').map(Number);
+                let current = new Date(startY, startM - 1, 1);
+                const end = new Date(endY, endM - 1, 1);
+                while (current <= end) {
+                    months.push({
+                        year: current.getFullYear(),
+                        month: current.getMonth() + 1,
+                        key: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`
+                    });
+                    current.setMonth(current.getMonth() + 1);
+                }
+                // Group by year
+                const grouped: Record<number, typeof months> = {};
+                months.forEach(m => {
+                    if (!grouped[m.year]) grouped[m.year] = [];
+                    grouped[m.year].push(m);
+                });
+                return grouped;
+            }
+            return getForecastMonths();
+        })();
+
         const flatForecastMonths = Object.values(forecastMonthsList).flat();
 
         // Helper to get history value
@@ -525,14 +572,17 @@ const ProductDetail: React.FC = () => {
             let prediction = 0;
             const targetDate = new Date(target.year, target.month - 1, 1);
 
-            if (benchmarkType === 'yoy') {
+            if (effectiveConfig.benchmark_type === 'yoy') {
                 // YoY Logic
-                if (yoyRange === 1) {
+                const range = effectiveConfig.yoy_range;
+                const weights = effectiveConfig.yoy_weight_sliders;
+
+                if (range === 1) {
                     const lastYear = new Date(targetDate);
                     lastYear.setFullYear(lastYear.getFullYear() - 1);
                     prediction = getHistoryValue(`${lastYear.getFullYear()}-${String(lastYear.getMonth() + 1).padStart(2, '0')}`);
-                } else if (yoyRange === 2) {
-                    const w1 = yoyWeightSliders[0] / 100;
+                } else if (range === 2) {
+                    const w1 = weights[0] / 100;
                     const w2 = 1 - w1;
                     const y1 = new Date(targetDate); y1.setFullYear(y1.getFullYear() - 1);
                     const y2 = new Date(targetDate); y2.setFullYear(y2.getFullYear() - 2);
@@ -540,9 +590,9 @@ const ProductDetail: React.FC = () => {
                     const v2 = getHistoryValue(`${y2.getFullYear()}-${String(y2.getMonth() + 1).padStart(2, '0')}`);
                     prediction = v1 * w1 + v2 * w2;
                 } else {
-                    const w1 = yoyWeightSliders[0] / 100;
-                    const w2 = (yoyWeightSliders[1] - yoyWeightSliders[0]) / 100;
-                    const w3 = (100 - yoyWeightSliders[1]) / 100;
+                    const w1 = weights[0] / 100;
+                    const w2 = (weights[1] - weights[0]) / 100;
+                    const w3 = (100 - weights[1]) / 100;
                     const y1 = new Date(targetDate); y1.setFullYear(y1.getFullYear() - 1);
                     const y2 = new Date(targetDate); y2.setFullYear(y2.getFullYear() - 2);
                     const y3 = new Date(targetDate); y3.setFullYear(y3.getFullYear() - 3);
@@ -552,13 +602,16 @@ const ProductDetail: React.FC = () => {
                 }
             } else {
                 // MoM Logic
-                const range = momRange;
-                const split1 = Math.round(range * (momTimeSliders[0] / 100));
-                const split2 = Math.round(range * (momTimeSliders[1] / 100));
+                const range = effectiveConfig.mom_range;
+                const timeSliders = effectiveConfig.mom_time_sliders;
+                const weightSliders = effectiveConfig.mom_weight_sliders;
 
-                const weight1 = momWeightSliders[0] / 100;
-                const weight2 = (momWeightSliders[1] - momWeightSliders[0]) / 100;
-                const weight3 = (100 - momWeightSliders[1]) / 100;
+                const split1 = Math.round(range * (timeSliders[0] / 100));
+                const split2 = Math.round(range * (timeSliders[1] / 100));
+
+                const weight1 = weightSliders[0] / 100;
+                const weight2 = (weightSliders[1] - weightSliders[0]) / 100;
+                const weight3 = (100 - weightSliders[1]) / 100;
 
                 const historyValues: number[] = [];
                 for (let i = 1; i <= range; i++) {
@@ -588,21 +641,13 @@ const ProductDetail: React.FC = () => {
 
 
             // Debug Log
-            if (benchmarkType === 'yoy' && target.month === 1) { // Log Jan as sample
-                console.log(`[Forecast Debug] ${target.key}:`, {
-                    historyValues: [
-                        yoyRange >= 1 ? getHistoryValue(`${target.year - 1}-${String(target.month).padStart(2, '0')}`) : null,
-                        yoyRange >= 2 ? getHistoryValue(`${target.year - 2}-${String(target.month).padStart(2, '0')}`) : null,
-                        yoyRange >= 3 ? getHistoryValue(`${target.year - 3}-${String(target.month).padStart(2, '0')}`) : null,
-                    ],
-                    weights: [
-                        yoyWeightSliders[0] / 100,
-                        (yoyWeightSliders[1] - yoyWeightSliders[0]) / 100,
-                        (100 - yoyWeightSliders[1]) / 100
-                    ],
-                    rawPrediction: prediction,
-                    ratioAdjusted: Math.round(prediction * (1 + ratioAdjustment / 100))
-                });
+            if (effectiveConfig.benchmark_type === 'yoy' && target.month === 1) { // Log Jan as sample
+                // ... omitted debug Log ...
+            }
+
+            // Apply ratio adjustment
+            if (effectiveConfig.ratio_adjustment !== 0) {
+                prediction = prediction * (1 + effectiveConfig.ratio_adjustment / 100);
             }
 
             newCalculated[target.key] = Math.round(prediction);
@@ -614,15 +659,15 @@ const ProductDetail: React.FC = () => {
         api.post(`/products/${sku}/strategy`, {
             ...strategy,
             // FORECAST PARAMS (Update with new UI state)
-            start_year_month: selectedStartMonth,
-            forecast_year_month: selectedForecastMonth,
-            benchmark_type: benchmarkType,
-            mom_range: momRange,
-            mom_time_sliders: momTimeSliders,
-            mom_weight_sliders: momWeightSliders,
-            yoy_range: yoyRange,
-            yoy_weight_sliders: yoyWeightSliders,
-            ratio_adjustment: ratioAdjustment,
+            start_year_month: effectiveConfig.start_year_month,
+            forecast_year_month: effectiveConfig.forecast_year_month,
+            benchmark_type: effectiveConfig.benchmark_type,
+            mom_range: effectiveConfig.mom_range,
+            mom_time_sliders: effectiveConfig.mom_time_sliders,
+            mom_weight_sliders: effectiveConfig.mom_weight_sliders,
+            yoy_range: effectiveConfig.yoy_range,
+            yoy_weight_sliders: effectiveConfig.yoy_weight_sliders,
+            ratio_adjustment: effectiveConfig.ratio_adjustment,
             forecast_overrides: forecastOverrides, // Current overrides
             calculated_forecasts: newCalculated,    // Newly calculated
 
@@ -632,7 +677,7 @@ const ProductDetail: React.FC = () => {
             replenishment_mode: strategy.replenishment_mode,
             supplier_info: strategy.supplier_info,
 
-            log_content: `更新销售预测配置: 基准 ${benchmarkType === 'mom' ? '环比' : '同比'}, 比率调整 ${ratioAdjustment}%`
+            log_content: `更新销售预测配置: 基准 ${effectiveConfig.benchmark_type === 'mom' ? '环比' : '同比'}, 比率调整 ${effectiveConfig.ratio_adjustment}%`
         }).then((result: any) => {
             setStrategy(result.strategy);
             fetchLogs();
@@ -815,6 +860,16 @@ const ProductDetail: React.FC = () => {
                                 dayOfWeekFactors={dayOfWeekFactors}
                                 isSaving={isSaving}
                                 onSave={() => handleSaveStrategy()}
+                                chartData={data.charts}
+                                // Forecast Configuration Parameters for Tooltip logic
+                                benchmarkType={benchmarkType}
+                                momRange={momRange}
+                                momTimeSliders={momTimeSliders}
+                                momWeightSliders={momWeightSliders}
+                                yoyRange={yoyRange}
+                                yoyWeightSliders={yoyWeightSliders}
+                                ratioAdjustment={ratioAdjustment}
+                                dailyActuals={data.kpi?.dailyActuals}
                             />
 
                             {/* 1. Main Forecast & Inventory Simulation Chart - Nano Design Refactor */}

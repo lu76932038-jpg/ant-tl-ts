@@ -27,6 +27,7 @@ const KPISection: React.FC<KPISectionProps> = ({ data, supplier }) => {
     const [hoveredCard, setHoveredCard] = useState<number | null>(null);
 
     // 计算衍生指标
+    const unit = data.basic.unit || 'PCS';
     const avgDailySales = Math.round(data.kpi.sales30Days / 30);
     const selectedPrice = supplier?.priceTiers?.find(t => t.isSelected)?.price || supplier?.price || 0;
     const inventoryValue = Math.round(data.kpi.inStock * selectedPrice);
@@ -36,7 +37,7 @@ const KPISection: React.FC<KPISectionProps> = ({ data, supplier }) => {
             id: 1,
             label: '在库数量',
             value: data.kpi.inStock.toLocaleString(),
-            unit: 'PCS',
+            unit: unit,
             icon: <Package size={20} />,
             color: 'blue',
             bgGradient: 'from-blue-50/80 to-white',
@@ -55,28 +56,36 @@ const KPISection: React.FC<KPISectionProps> = ({ data, supplier }) => {
         {
             id: 2,
             label: '库存估值',
-            value: inventoryValue > 10000 ? (inventoryValue / 1000).toFixed(1) + 'k' : inventoryValue.toLocaleString(),
+            value: (data.kpi.inventoryValue || 0).toLocaleString(),
             unit: '¥',
             icon: <CircleDollarSign size={20} />,
             color: 'amber',
             bgGradient: 'from-amber-50/80 to-white',
             borderColor: 'border-amber-100/50',
             accent: 'text-amber-600',
-            detail: `单价 ¥${selectedPrice.toFixed(2)}`,
+            detail: '基于FIFO成本核算',
             trend: 'Live',
             trendDir: 'neutral',
-            footerIcon: <CircleDollarSign size={140} />,
+            footerIcon: <CircleDollarSign size={130} />,
             tooltip: {
-                title: '库存资产估值',
-                formula: '在库库存 × 签约单价',
-                process: `${data.kpi.inStock.toLocaleString()} PCS × ¥${selectedPrice.toFixed(2)} = ¥${inventoryValue.toLocaleString()}`
+                title: '库存资产估值 (FIFO)',
+                formula: '∑(批次数量 × 入库单价)',
+                process: (() => {
+                    if (data.kpi.valuationDetails && data.kpi.valuationDetails.length > 0) {
+                        return data.kpi.valuationDetails.map(d => {
+                            const typeLabel = d.type === 'FALLBACK' ? ' (兜底/期初)' : '';
+                            return `${d.date}: ${d.qty}${unit} × ¥${d.price}${typeLabel}`;
+                        }).join('\n');
+                    }
+                    return `${data.kpi.inStock.toLocaleString()} PCS × ¥${selectedPrice.toFixed(2)} = ¥${(data.kpi.inStock * selectedPrice).toLocaleString()}`;
+                })()
             }
         },
         {
             id: 3,
             label: '在途采购',
             value: data.kpi.inTransit.toLocaleString(),
-            unit: 'PCS',
+            unit: unit,
             icon: <Truck size={20} />,
             color: 'indigo',
             bgGradient: 'from-indigo-50/80 to-white',
@@ -96,9 +105,9 @@ const KPISection: React.FC<KPISectionProps> = ({ data, supplier }) => {
         },
         {
             id: 4,
-            label: '30天销量',
+            label: '30天出库实绩',
             value: data.kpi.sales30Days.toLocaleString(),
-            unit: 'PCS',
+            unit: unit,
             icon: <ShoppingCart size={20} />,
             color: 'emerald',
             bgGradient: 'from-emerald-50/80 to-white',
@@ -116,22 +125,25 @@ const KPISection: React.FC<KPISectionProps> = ({ data, supplier }) => {
         },
         {
             id: 5,
-            label: '日均销速',
-            value: avgDailySales.toLocaleString(),
-            unit: 'PCS/D',
+            label: '30天出库预测',
+            value: (data.kpi.forecast30Days || 0).toLocaleString(),
+            unit: unit,
             icon: <Activity size={20} />,
             color: 'purple',
             bgGradient: 'from-purple-50/80 to-white',
             borderColor: 'border-purple-100/50',
             accent: 'text-purple-600',
-            detail: '基于30日历史计算',
+            detail: '未来30天需求',
             trend: 'Stable',
             trendDir: 'neutral',
             footerIcon: <Activity size={140} />,
             tooltip: {
-                title: '日销速 (V-Daily)',
-                formula: '30天销量 / 30',
-                process: `${data.kpi.sales30Days} / 30 ≈ ${avgDailySales} PCS/天`
+                title: '智能预测 (Forecast 30D)',
+                formula: '∑(未来30天日预测值)',
+                process: (() => {
+                    const futureDate = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+                    return `算法: ARIMA趋势预测 + 季节性加权\n计算过程: 根据销售预测，计算至 ${futureDate} 总计销售预测数量`;
+                })()
             }
         },
         {
@@ -150,8 +162,14 @@ const KPISection: React.FC<KPISectionProps> = ({ data, supplier }) => {
             footerIcon: <ShieldAlert size={140} />,
             tooltip: {
                 title: '风险等级判定',
-                formula: '周转天数 < 安全周期 ? 高风险 : 低风险',
-                process: `当前周转 ${data.kpi.turnoverDays} 天 | 判定结果: ${data.kpi.stockoutRisk}`
+                formula: '周转天数 < 供应商交期 ? 高风险 : ...',
+                process: (() => {
+                    // Derive Lead Time from selected tier
+                    const selectedTier = supplier?.priceTiers?.find(t => t.isSelected);
+                    const leadTime = selectedTier?.leadTime || 30; // Default to 30 if no tier selected
+
+                    return `当前周转 ${data.kpi.turnoverDays} 天 vs 供应商交期 ${leadTime} 天 (基于${selectedTier ? '选中阶梯' : '默认'})`;
+                })()
             }
         }
     ];
@@ -192,7 +210,7 @@ const KPISection: React.FC<KPISectionProps> = ({ data, supplier }) => {
                                 </div>
                                 <div>
                                     <p className="text-[9px] text-slate-400 font-bold uppercase mb-0.5 text-left">计算过程</p>
-                                    <p className="text-[9px] font-mono leading-relaxed text-slate-200 text-left break-all">
+                                    <p className="text-[9px] font-mono leading-relaxed text-slate-200 text-left break-all whitespace-pre-wrap">
                                         {kpi.tooltip.process}
                                     </p>
                                 </div>

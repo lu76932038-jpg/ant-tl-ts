@@ -3,6 +3,14 @@ export interface KPI {
     inStock: number;
     inTransit: number;
     sales30Days: number;
+    forecast30Days?: number;
+    inventoryValue?: number;
+    valuationDetails?: {
+        date: string;
+        qty: number;
+        price: number;
+        type: 'HISTORY' | 'FALLBACK';
+    }[];
     turnoverDays: number;
     stockoutRisk: string;
     inTransitBatches?: {
@@ -12,6 +20,7 @@ export interface KPI {
         isOverdue: boolean;
         overdueDays: number;
     }[];
+    dailyActuals?: { date: string, qty: number }[];
 }
 
 export interface ChartData {
@@ -89,6 +98,7 @@ export interface ProductDetailData {
         sku: string;
         name: string;
         status: string;
+        unit?: string;
     };
     kpi: KPI;
     charts: ChartData[];
