@@ -565,9 +565,48 @@ const ForecastDataGrid: React.FC<ForecastDataGridProps> = ({
                                                     {formatNumber(mData.monthlyTotal)}
                                                 </div>
                                                 {/* Tooltip */}
-                                                <div className="absolute bottom-full mb-1 hidden group-hover/cell:block bg-gray-800 text-white text-[10px] p-2 rounded shadow-lg z-50 whitespace-pre">
-                                                    实绩: {formatNumber(mData.actualVal || 0)}{'\n'}
-                                                    预测: {formatNumber(mData.forecastVal || 0)}
+                                                <div className="absolute bottom-full mb-1 hidden group-hover/cell:block bg-gray-800 text-white text-[10px] p-2 rounded shadow-lg z-50 whitespace-pre min-w-[200px] text-left">
+                                                    {mData.source === 'today-mix' ? (() => {
+                                                        const todayStr = new Date().toISOString().split('T')[0];
+                                                        const pastSum = mData.days.filter((d: any) => d.date < todayStr).reduce((a: number, b: any) => a + b.value, 0);
+                                                        const todayVal = mData.days.find((d: any) => d.date === todayStr)?.value || 0;
+                                                        const futureSum = mData.days.filter((d: any) => d.date > todayStr).reduce((a: number, b: any) => a + b.value, 0);
+
+                                                        return (
+                                                            <>
+                                                                <div className="font-bold border-b border-gray-600 pb-1 mb-1">
+                                                                    当前显示: {formatNumber(mData.monthlyTotal)}
+                                                                </div>
+                                                                <div className="space-y-1 text-gray-300">
+                                                                    <div className="text-[10px] text-gray-400 mb-1">基于每日显示数值汇总:</div>
+
+                                                                    <div className="flex justify-between gap-4">
+                                                                        <span>• 历史实绩:</span>
+                                                                        <span className="font-mono text-white">{formatNumber(pastSum)}</span>
+                                                                    </div>
+                                                                    <div className="text-[9px] text-gray-500 pl-2 mb-1">(昨日及以前)</div>
+
+                                                                    <div className="flex justify-between gap-4">
+                                                                        <span>• 今日数值:</span>
+                                                                        <span className="font-mono text-purple-300 font-bold">{formatNumber(todayVal)}</span>
+                                                                    </div>
+                                                                    <div className="text-[9px] text-gray-500 pl-2 mb-1">(取 实绩/预测 较大值)</div>
+
+                                                                    <div className="flex justify-between gap-4">
+                                                                        <span>• 未来预测:</span>
+                                                                        <span className="font-mono text-white">{formatNumber(futureSum)}</span>
+                                                                    </div>
+                                                                    <div className="text-[9px] text-gray-500 pl-2">(明日及以后)</div>
+                                                                </div>
+                                                            </>
+                                                        );
+                                                    })() : (
+                                                        mData.source === 'forecast' ? (
+                                                            <>预测: {formatNumber(mData.forecastVal || 0)}</>
+                                                        ) : (
+                                                            <>实绩: {formatNumber(mData.actualVal || 0)}</>
+                                                        )
+                                                    )}
                                                 </div>
                                             </div>
                                         </td>

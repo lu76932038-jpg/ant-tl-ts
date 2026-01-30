@@ -61,7 +61,7 @@ export class StrategyModel {
                     service_level DECIMAL(10, 2) DEFAULT 0.95,
                     rop INT DEFAULT 0,
                     eoq INT DEFAULT 0,
-                    benchmark_type VARCHAR(10) DEFAULT 'mom',
+                    benchmark_type VARCHAR(10) DEFAULT 'yoy',
                     mom_range INT DEFAULT 6,
                     mom_time_sliders JSON DEFAULT NULL,
                     mom_weight_sliders JSON DEFAULT NULL,
@@ -94,7 +94,7 @@ export class StrategyModel {
                 }
             };
 
-            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN benchmark_type VARCHAR(10) DEFAULT 'mom'");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN benchmark_type VARCHAR(10) DEFAULT 'yoy'");
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN mom_range INT DEFAULT 6");
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN mom_time_sliders JSON DEFAULT NULL");
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN mom_weight_sliders JSON DEFAULT NULL");

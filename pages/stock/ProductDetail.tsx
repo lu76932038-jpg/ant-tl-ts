@@ -109,7 +109,7 @@ const ProductDetail: React.FC = () => {
     const [viewDimension, setViewDimension] = useState<'month' | 'year'>('month');
 
     // Forecast Benchmark Config
-    const [benchmarkType, setBenchmarkType] = useState<'mom' | 'yoy'>('mom');
+    const [benchmarkType, setBenchmarkType] = useState<'mom' | 'yoy'>('yoy');
 
     // MoM (Moving Average)
     const [momRange, setMomRange] = useState<3 | 6 | 12>(6);
@@ -137,7 +137,8 @@ const ProductDetail: React.FC = () => {
     const forecastOptions = [
         `${currentYear}-12`,
         `${currentYear + 1}-12`,
-        `${currentYear + 2}-12`
+        `${currentYear + 2}-12`,
+        `${currentYear + 3}-12`
     ];
 
     useEffect(() => {
@@ -171,7 +172,7 @@ const ProductDetail: React.FC = () => {
             setStrategy(result.strategy);
             setSupplier(result.supplier);
             setEditSupplierInfo(result.supplier);
-            setEditSafetyStock(result.strategy.safety_stock_days || 3);
+            setEditSafetyStock(result.strategy.safety_stock_days || 1);
             setEditReplenishmentCycle(result.strategy.replenishment_sales_cycle || 3);
             setEditBufferDays(result.strategy.buffer_days !== undefined ? result.strategy.buffer_days : 30);
 
@@ -208,21 +209,31 @@ const ProductDetail: React.FC = () => {
 
             // 保存初始值用于检测变更
             setSavedStrategyValues({
-                safetyStock: result.strategy.safety_stock_days || 3,
+                safetyStock: result.strategy.safety_stock_days || 1,
                 replenishmentCycle: result.strategy.replenishment_sales_cycle || 3,
                 bufferDays: result.strategy.buffer_days !== undefined ? result.strategy.buffer_days : 30,
                 replenishmentMode: result.strategy.replenishment_mode || 'economic'
             });
 
             const currentYear = new Date().getFullYear();
-            // Default Start: Last Year Jan
-            setSelectedStartMonth(result.strategy.start_year_month || `${currentYear - 1}-01`);
-            // Default End: Current Year Dec
-            setSelectedForecastMonth(result.strategy.forecast_year_month || `${currentYear}-12`);
+            // Default Start: 3 Years Back Jan
+            setSelectedStartMonth(result.strategy.start_year_month || `${currentYear - 3}-01`);
+            // Default End: 3 Years Forward Dec
+            setSelectedForecastMonth(result.strategy.forecast_year_month || `${currentYear + 3}-12`);
 
             // Ensure supplier info has a default object if null so the card shows up
             if (!result.supplier) {
-                const emptySupplier = { name: '未设置', code: 'N/A', price: 0, leadTime: 0 };
+                const emptySupplier = {
+                    name: '殸木供应商',
+                    code: 'DEFAULT',
+                    price: 1,
+                    leadTime: 30,
+                    minOrderQty: 1,
+                    orderUnitQty: 1,
+                    priceTiers: [
+                        { minQty: 1, price: 1, leadTime: 30, isSelected: true }
+                    ]
+                };
                 setSupplier(emptySupplier as any);
                 setEditSupplierInfo(emptySupplier as any);
             }

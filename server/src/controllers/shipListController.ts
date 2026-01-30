@@ -82,6 +82,40 @@ export const generateMockData = async (req: Request, res: Response) => {
     }
 };
 
+const normalizeDate = (input: any): string => {
+    if (!input) return '';
+
+    // Handle Excel Serial Date (Number)
+    // Excel base date: Dec 30 1899. 
+    // Logic: 25569 is the offset between Excel (1900-01-01) and Unix (1970-01-01) roughly.
+    // Precise: new Date(1899, 11, 30) plus days.
+    if (typeof input === 'number') {
+        // Adjust for Excel leap year bug (1900 is not leap year in reality but Excel thinks so) if needed.
+        // For modern dates (>March 1 1900), straightforward.
+        const date = new Date(Math.round((input - 25569) * 86400 * 1000));
+        // Tweak: ensure we get YYYY-MM-DD. 
+        // toISOString() uses UTC. Excel dates usually implied local or "date only". 
+        // We assume the date is intended to be the same globally (e.g. 2022-10-28).
+        // Adding a small buffer (12 hours) prevents midnight rounding issues going back a day.
+        date.setSeconds(date.getSeconds() + 43200); // 12 hours
+        return date.toISOString().split('T')[0];
+    }
+
+    // Handle String
+    if (typeof input === 'string') {
+        const trimmed = input.trim();
+        // Check YYYY-MM-DD
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+        // Try parsing
+        const date = new Date(trimmed);
+        if (!isNaN(date.getTime())) {
+            return date.toISOString().split('T')[0];
+        }
+    }
+
+    return String(input);
+};
+
 export const importShipData = async (req: Request, res: Response) => {
     try {
         const items = req.body; // Expect JSON array
@@ -94,58 +128,62 @@ export const importShipData = async (req: Request, res: Response) => {
         let newSkuCount = 0;
 
         // 1. Pre-process and validate
-        // Since we might have many rows, we process them sequentially or in chunks.
-        // For simplicity and safety (checking DB check), we do it sequentially for SKU checks.
-        // Optimization: Fetch ALL existing SKUs first to avoid N queries.
-
         // Optimization: Fetch ALL existing SKUs first to avoid N queries.
         const allStock = await StockModel.findAll();
-        const existingSkus = new Set(allStock.map(s => s.sku));
+        // Use lowercase for case-insensitive comparison (MySQL is case-insensitive by default)
+        const existingSkus = new Set(allStock.map(s => s.sku.toLowerCase()));
 
         for (const item of items) {
             // Basic Validation
             if (!item.product_model || !item.product_name || !item.outbound_date || !item.quantity || !item.customer_name) {
-                continue; // Skip invalid rows or we could throw error
+                // Try to normalize date before rejecting?
+                // logic: parse `outbound_date` from item, even if it's number
+            }
+
+            // Normalize Date First
+            const rawDate = item.outbound_date;
+            const normalizedDate = normalizeDate(rawDate);
+
+            // Re-validate details with normalized date
+            if (!item.product_model || !item.product_name || !normalizedDate || !item.quantity || !item.customer_name) {
+                continue; // Skip invalid rows
             }
 
             const sku = item.product_model;
+            const skuLower = sku.toLowerCase();
 
             // 2. Auto-create Product if missing
-            if (!existingSkus.has(sku) && !createdSkus.has(sku)) {
-                console.log(`Auto-creating new product from import: ${sku}`);
-                console.log(`Auto-creating new product from import: ${sku}`);
-                await StockModel.create({
-                    sku: sku,
-                    name: item.product_name, // Use the name from import
-                    status: StockStatus.HEALTHY, // Default Healthy
-                    inStock: 0,
-                    available: 0,
-                    inTransit: 0,
-                    unit: '个'
-                });
-                createdSkus.add(sku);
-                newSkuCount++;
+            // check both existing DB and effectively created in this batch
+            if (!existingSkus.has(skuLower) && !createdSkus.has(skuLower)) {
+                try {
+                    console.log(`Auto-creating new product from import: ${sku}`);
+                    await StockModel.create({
+                        sku: sku,
+                        name: item.product_name, // Use the name from import
+                        status: StockStatus.HEALTHY, // Default Healthy
+                        inStock: 0,
+                        available: 0,
+                        inTransit: 0,
+                        unit: '个'
+                    });
+                    newSkuCount++;
+                } catch (e: any) {
+                    // Ignore duplicate entry error (e.g. case sensitivity race or existing)
+                    if (e.code === 'ER_DUP_ENTRY') {
+                        console.warn(`Skipped duplicate creation for SKU: ${sku}`);
+                    } else {
+                        throw e; // Rethrow other errors
+                    }
+                }
+                // Mark as processed to prevent retries in loop
+                createdSkus.add(skuLower);
             }
 
             // 3. Prepare Ship Record
-            // If outbound_id is provided, check uniqueness? 
-            // For now, let's assume if it's provided we use it, if not we generate it. 
-            // ShipListModel.createBatch doesn't auto-generate if we pass it, 
-            // BUT createBatch logic in Model (as checked previously) assumes we pass everything.
-            // Let's look at ShipListModel.createBatch again. 
-            // It expects `outbound_id` in the item.
-
             let oid = item.outbound_id;
             if (!oid) {
-                // We need to generate one. 
-                // Since model method is private or static, we might need access or replicate logic.
-                // Or better, let's update createBatch in Model to handle missing IDs? 
-                // For now, replicate logic here to keep Model simple batch insert.
                 const prefix = 'CK';
-                const d = new Date(); // Use current time for import operation part
-                // Using random to avoid collision in same batch milliseconds
                 const random = Math.floor(Math.random() * 1000000000).toString().padStart(9, '0');
-                // Simple unique ID for batch
                 oid = `${prefix}-${Date.now()}-${random}-${validItems.length}`;
             }
 
@@ -153,7 +191,7 @@ export const importShipData = async (req: Request, res: Response) => {
                 outbound_id: oid,
                 product_model: sku,
                 product_name: item.product_name,
-                outbound_date: item.outbound_date,
+                outbound_date: normalizedDate,
                 quantity: Number(item.quantity),
                 customer_name: item.customer_name,
                 unit_price: item.unit_price ? Number(item.unit_price) : 0
@@ -170,8 +208,11 @@ export const importShipData = async (req: Request, res: Response) => {
             newSkusCreated: newSkuCount
         });
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error importing ship data:', error);
-        res.status(500).json({ error: 'Failed to import data' });
+        res.status(500).json({
+            error: 'Failed to import data',
+            details: error.message || String(error)
+        });
     }
 };

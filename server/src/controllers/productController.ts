@@ -84,6 +84,7 @@ export class ProductController {
             }
 
             // 2.1.a [New] Fetch Real Daily Actuals (Dynamic Interval)
+            // Fix: GROUP BY date alias (or DATE(outbound_date)) to ensure unique daily rows
             const [dailyActuals] = await pool.execute<RowDataPacket[]>(
                 `SELECT 
                     DATE_FORMAT(outbound_date, '%Y-%m-%d') as date,
@@ -91,10 +92,23 @@ export class ProductController {
                  FROM shiplist
                  WHERE product_model = ?
                    AND outbound_date >= DATE_SUB(CURDATE(), INTERVAL ? MONTH)
-                 GROUP BY outbound_date
-                 ORDER BY outbound_date ASC`,
+                 GROUP BY date
+                 ORDER BY date ASC`,
                 [sku, lookbackMonths]
             );
+
+            // --- Debug: Check for mismatch between History Agg and Daily Agg ---
+            const debugHistorySum = (salesHistory as any[]).reduce((sum, r) => sum + Number(r.total_qty), 0);
+            const debugDailySum = (dailyActuals as any[]).reduce((sum, r) => sum + Number(r.qty), 0);
+            console.log(`[ForecastDebug] SKU: ${sku}`);
+            console.log(`[ForecastDebug] Sales History Sum (All Time): ${debugHistorySum}`);
+            console.log(`[ForecastDebug] Daily Actuals Sum (Last ${lookbackMonths} mo): ${debugDailySum}`);
+            // Check specific month (e.g. Jan 2025) if possible
+            const jan2025H = (salesHistory as any[]).find(r => r.month === '2025-01');
+            const jan2025D = (dailyActuals as any[])
+                .filter(r => r.date.startsWith('2025-01'))
+                .reduce((sum, r) => sum + Number(r.qty), 0);
+            console.log(`[ForecastDebug] 2025-01 History: ${jan2025H?.total_qty || 0}, DailySum: ${jan2025D}`);
 
             // 2.1.b [New] Calculate Weekday Seasonality (Last 12 months)
             // 0=Mon, 6=Sun in WEEKDAY() - WAIT: MySQL WEEKDAY() 0=Mon, 6=Sun.

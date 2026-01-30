@@ -132,9 +132,11 @@ export const ImportDataModal: React.FC<ImportDataModalProps> = ({ isOpen, onClos
             } else {
                 setError('服务器返回错误，导入失败。');
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('API Error:', err);
-            setError('提交失败，请联系管理员。');
+            // Extract specific error from backend if available
+            const serverMsg = err.response?.data?.details || err.response?.data?.error;
+            setError(serverMsg || '提交失败，请联系管理员。');
         } finally {
             setIsLoading(false);
         }
