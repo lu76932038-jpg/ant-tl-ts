@@ -22,7 +22,7 @@ export const AddEntryModal: React.FC<AddEntryModalProps> = ({ onClose, onSuccess
         e.preventDefault();
         setIsSubmitting(true);
         try {
-            const response = await fetch(`${config.apiBaseUrl}/api/entrylist`, {
+            const response = await fetch(`${config.apiBaseUrl}/api/entry-list`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)

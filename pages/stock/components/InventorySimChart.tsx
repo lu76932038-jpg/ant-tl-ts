@@ -1,25 +1,26 @@
 import React, { useMemo } from 'react';
 import {
-    ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Scatter
+    ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Scatter
 } from 'recharts';
 import { ProductDetailData } from '../types';
 
 interface InventorySimChartProps {
     data: ProductDetailData | null;
     editSafetyStock: number;
+    editReplenishmentCycle: number;
     currentLeadTime: number;
     eoq: number;
     dayOfWeekFactors?: number[];
     forecastOverrides?: Record<string, number>;
     calculatedForecasts?: Record<string, number>;
+    minOrderQty?: number;  // 最小起订量 (MOQ)
+    orderUnitQty?: number; // 订货单位量
 }
 
 // Custom Tooltip Component defined outside main component to avoid recreation
 const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || payload.length === 0) return null;
 
-    // Remove duplicates based on dataKey (since dual axes might duplicate points)
-    // Create a map to ensure unique metrics
     const dataMap = new Map();
     payload.forEach((p: any) => {
         dataMap.set(p.dataKey, p);
@@ -32,11 +33,11 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     const safety = dataMap.get('safetyStock')?.value;
     const restock = dataMap.get('restock')?.value;
     const inbound = dataMap.get('inbound')?.value;
-    const items = payload[0]?.payload; // Get full data object
+    const items = payload[0]?.payload;
 
-    // Determine status color
     let statusColor = 'bg-blue-500';
     let statusText = '正常';
+
     if (stock < safety) {
         statusColor = 'bg-red-500';
         statusText = '缺货风险';
@@ -50,7 +51,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
     return (
         <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-xl border border-gray-100 p-0 overflow-hidden min-w-[240px]">
-            {/* Header */}
             <div className={`px-4 py-2 border-b border-gray-100 flex items-center justify-between ${statusColor}/5`}>
                 <span className="text-gray-600 font-medium text-sm">{label}</span>
                 <span className={`text-xs px-2 py-0.5 rounded-full ${statusColor} text-white`}>
@@ -58,9 +58,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                 </span>
             </div>
 
-            {/* Content */}
             <div className="p-4 space-y-4">
-                {/* Main Metric: Stock */}
                 <div className="flex justify-between items-end">
                     <div>
                         <div className="text-xs text-gray-400 mb-1">预计库存</div>
@@ -78,7 +76,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                     )}
                 </div>
 
-                {/* Strategy Metrics */}
                 <div className="space-y-2 pt-2 border-t border-gray-50">
                     <div className="flex justify-between items-center text-xs">
                         <span className="text-gray-500 flex items-center gap-1.5">
@@ -96,7 +93,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                     </div>
                 </div>
 
-                {/* Dynamic Metrics */}
                 <div className="space-y-2 pt-2 border-t border-gray-50 bg-gray-50/50 -mx-4 px-4 py-3">
                     <div className="flex justify-between items-center text-xs">
                         <span className="text-gray-500">预测销售 (需求)</span>
@@ -107,25 +103,21 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                         <span className="font-bold text-blue-600">-{outbound?.toLocaleString()}</span>
                     </div>
 
-                    {/* 在途详情 */}
                     {items?.totalInTransit > 0 && (
-                        <div className="pt-2 mt-2 border-t border-gray-200/50">
-                            <div className="flex justify-between items-center text-xs mb-1">
-                                <span className="text-gray-500">总在途数量</span>
-                                <span className="font-medium text-blue-600">{items.totalInTransit.toLocaleString()}</span>
+                        <div className="mt-3 pt-2 border-t border-dashed border-gray-200">
+                            <div className="flex justify-between items-center bg-blue-50/50 rounded-lg p-2.5">
+                                <span className="text-xs text-blue-600/80 font-medium flex items-center gap-1.5">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400"></div>
+                                    总在途数量
+                                </span>
+                                <span className="text-sm font-bold text-blue-700 font-mono tracking-tight">
+                                    {Math.round(items.totalInTransit).toLocaleString()}
+                                    <span className="text-[10px] text-blue-400 ml-1 font-normal">PCS</span>
+                                </span>
                             </div>
-                            {items.nextArrivalDate && (
-                                <div className="flex justify-between items-center text-xs">
-                                    <span className="text-gray-400 flex items-center gap-1">
-                                        🕒 下批预计 ({items.nextArrivalDate.slice(5)})
-                                    </span>
-                                    <span className="font-medium text-blue-600">+{items.nextArrivalQty?.toLocaleString()}</span>
-                                </div>
-                            )}
                         </div>
                     )}
 
-                    {/* 当日触发补货 */}
                     {restock > 0 && (
                         <div className="flex justify-between items-center text-xs animate-pulse mt-2 pt-2 border-t border-purple-100">
                             <span className="text-purple-600 font-bold flex items-center gap-1">
@@ -134,7 +126,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                             <span className="font-bold text-purple-600">+{restock.toLocaleString()}</span>
                         </div>
                     )}
-                    {/* 当日到货 */}
                     {inbound > 0 && (
                         <div className="flex justify-between items-center text-xs mt-1">
                             <span className="text-blue-600 font-bold flex items-center gap-1">
@@ -152,13 +143,15 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 const InventorySimChart: React.FC<InventorySimChartProps> = ({
     data,
     editSafetyStock,
+    editReplenishmentCycle,
     currentLeadTime,
     eoq,
     dayOfWeekFactors = [],
     forecastOverrides = {},
-    calculatedForecasts = {}
+    calculatedForecasts = {},
+    minOrderQty = 1,
+    orderUnitQty = 1
 }) => {
-    // Add mount check with delay to ensure flex container has size
     const [isMounted, setIsMounted] = React.useState(false);
     React.useEffect(() => {
         const timer = setTimeout(() => {
@@ -173,19 +166,14 @@ const InventorySimChart: React.FC<InventorySimChartProps> = ({
         const days = 365;
         const result = [];
 
-        // 1. 获取基础预测数据 (优先使用 charts 中的 forecastQty)
-        // 支持日级别精确预测 (Backend 每日预测) 或月级别平滑降级
+        // 1. 获取基础预测数据
         const dailyForecastMap = new Map<string, number>();
         const monthlyForecastMap = new Map<string, number>();
 
         if (data.charts) {
             data.charts.filter(c => c.type === 'future').forEach(c => {
-                // Store TOTAL monthly forecast for accurate distribution
-                // (Backend usually sends forecastQty as the monthly total)
                 const monthKey = c.month;
                 monthlyForecastMap.set(monthKey, c.forecastQty || 0);
-
-                // Daily Precise (if available) - overrides calculated distribution
                 if (c.daily_forecasts) {
                     c.daily_forecasts.forEach(d => {
                         dailyForecastMap.set(d.date, d.quantity);
@@ -194,7 +182,6 @@ const InventorySimChart: React.FC<InventorySimChartProps> = ({
             });
         }
 
-        // 备用：如果没有预测数据，使用历史平均
         const fallbackDailySales = data.kpi.sales30Days > 0
             ? data.kpi.sales30Days / 30
             : (data.kpi.inStock > 0 ? data.kpi.inStock / 60 : 10);
@@ -210,153 +197,177 @@ const InventorySimChart: React.FC<InventorySimChartProps> = ({
             });
         }
 
+        // --- 预处理：计算每日预测序列 (覆盖模拟天数 + 销售周期天数) ---
+        const totalSimDays = days + Math.round(editSafetyStock * 31) + 10; // 额外缓冲
+        const dayForecasts: number[] = [];
+        for (let j = 0; j < totalSimDays; j++) {
+            const d = new Date();
+            d.setDate(d.getDate() + j);
+            const dStr = d.toISOString().split('T')[0];
+            const mStr = dStr.slice(0, 7);
+
+            let ds = 0;
+            const overrideVal = forecastOverrides[mStr];
+            const calcVal = calculatedForecasts[mStr];
+
+            if (overrideVal !== undefined || calcVal !== undefined) {
+                const monthlyTotal = overrideVal !== undefined ? overrideVal : (calcVal ?? 0);
+                const daysInMonthInner = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+                if (dayOfWeekFactors && dayOfWeekFactors.length === 7) {
+                    let totalWeights = 0;
+                    for (let dd = 1; dd <= daysInMonthInner; dd++) {
+                        const tempDate = new Date(d.getFullYear(), d.getMonth(), dd);
+                        const factorIndex = tempDate.getDay() === 0 ? 6 : tempDate.getDay() - 1;
+                        totalWeights += dayOfWeekFactors[factorIndex] || 1;
+                    }
+                    const factorIndex = d.getDay() === 0 ? 6 : d.getDay() - 1;
+                    const factor = dayOfWeekFactors[factorIndex] || 1;
+                    ds = totalWeights > 0 ? (monthlyTotal * factor) / totalWeights : monthlyTotal / daysInMonthInner;
+                } else {
+                    ds = monthlyTotal / daysInMonthInner;
+                }
+            } else {
+                const backendDaily = dailyForecastMap.get(dStr);
+                if (backendDaily !== undefined) {
+                    ds = backendDaily;
+                } else {
+                    const monthlyTotal = monthlyForecastMap.get(mStr);
+                    if (monthlyTotal !== undefined) {
+                        const daysInMonthInner = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+                        if (dayOfWeekFactors && dayOfWeekFactors.length === 7) {
+                            let totalWeights = 0;
+                            for (let dd = 1; dd <= daysInMonthInner; dd++) {
+                                const tempDate = new Date(d.getFullYear(), d.getMonth(), dd);
+                                const factorIndex = tempDate.getDay() === 0 ? 6 : tempDate.getDay() - 1;
+                                totalWeights += dayOfWeekFactors[factorIndex] || 1;
+                            }
+                            const factorIndex = d.getDay() === 0 ? 6 : d.getDay() - 1;
+                            const factor = dayOfWeekFactors[factorIndex] || 1;
+                            ds = totalWeights > 0 ? (monthlyTotal * factor) / totalWeights : monthlyTotal / daysInMonthInner;
+                        } else {
+                            ds = monthlyTotal / daysInMonthInner;
+                        }
+                    } else {
+                        ds = fallbackDailySales;
+                    }
+                }
+            }
+            dayForecasts.push(ds);
+        }
+
         // 模拟状态
         let currentStock = data.kpi.inStock || 0;
-        let currentBacklog = 0; // 新增：积压欠单量（需求未满足累积）
-
-        // 记录补货在途：Key=到货日期, Value=数量
-        const replenishmentInTransit = new Map<string, number>();
+        let currentBacklog = 0;
+        let restockIndexCounter = 0;
+        const replenishmentInTransit = new Map<string, { qty: number, index: number }>();
 
         for (let i = 0; i < days; i++) {
             const date = new Date();
             date.setDate(date.getDate() + i);
             const dateStr = date.toISOString().split('T')[0];
-            const monthStr = dateStr.slice(0, 7); // YYYY-MM
 
-            // 1. 获取当日预测销量 (核心逻辑更新)
-            let dailySales;
+            const dailySales = dayForecasts[i];
 
-            // A. Check for Frontend Override (Higher Priority)
-            const overrideVal = forecastOverrides[monthStr];
-            const calcVal = calculatedForecasts[monthStr];
-
-            // 只要有 override 或 calculated，就视为有前端干预，忽略后端 dailyForecastMap
-            if (overrideVal !== undefined || calcVal !== undefined) {
-                // Determine monthly total from props
-                const monthlyTotal = overrideVal !== undefined ? overrideVal : (calcVal ?? 0);
-
-                // Distribute monthly total
-                const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-
-                if (dayOfWeekFactors && dayOfWeekFactors.length === 7) {
-                    // Weighted Distribution
-                    let totalWeights = 0;
-                    for (let d = 1; d <= daysInMonth; d++) {
-                        const tempDate = new Date(date.getFullYear(), date.getMonth(), d);
-                        const factorIndex = tempDate.getDay() === 0 ? 6 : tempDate.getDay() - 1;
-                        totalWeights += dayOfWeekFactors[factorIndex] || 1;
-                    }
-                    const factorIndex = date.getDay() === 0 ? 6 : date.getDay() - 1;
-                    const factor = dayOfWeekFactors[factorIndex] || 1;
-
-                    dailySales = totalWeights > 0 ? (monthlyTotal * factor) / totalWeights : monthlyTotal / daysInMonth;
-                } else {
-                    dailySales = monthlyTotal / daysInMonth;
-                }
-            } else {
-                // B. No Frontend Override - Use Backend Data
-                const backendDaily = dailyForecastMap.get(dateStr);
-
-                if (backendDaily !== undefined) {
-                    dailySales = backendDaily;
-                } else {
-                    // Fallback to backend monthly distribution
-                    const monthlyTotal = monthlyForecastMap.get(monthStr);
-                    if (monthlyTotal !== undefined) {
-                        const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-
-                        if (dayOfWeekFactors && dayOfWeekFactors.length === 7) {
-                            // Weighted Distribution
-                            let totalWeights = 0;
-                            for (let d = 1; d <= daysInMonth; d++) {
-                                const tempDate = new Date(date.getFullYear(), date.getMonth(), d);
-                                const factorIndex = tempDate.getDay() === 0 ? 6 : tempDate.getDay() - 1;
-                                totalWeights += dayOfWeekFactors[factorIndex] || 1;
-                            }
-                            const factorIndex = date.getDay() === 0 ? 6 : date.getDay() - 1;
-                            const factor = dayOfWeekFactors[factorIndex] || 1;
-
-                            dailySales = totalWeights > 0 ? (monthlyTotal * factor) / totalWeights : monthlyTotal / daysInMonth;
-                        } else {
-                            dailySales = monthlyTotal / daysInMonth;
-                        }
-                    } else {
-                        dailySales = fallbackDailySales;
-                    }
-                }
-            }
-
-            // 2. 累加当日需求到欠单池 (需求持久化)
-            currentBacklog += dailySales;
-
-            // 3. 动态 ROP/安全库存计算
-            const dynamicSafetyStock = Math.round(dailySales * 30 * editSafetyStock);
-            const leadTimeConsumption = dailySales * currentLeadTime;
-            const targetRopLevel = dynamicSafetyStock + leadTimeConsumption;
-
-            // 计算当前所有在途
+            // 1. 计算当前所有在途
             let totalInTransit = 0;
             inTransitArrivals.forEach((qty, arrivalDate) => {
                 if (arrivalDate > dateStr) totalInTransit += qty;
             });
-            replenishmentInTransit.forEach((qty, arrivalDate) => {
-                if (arrivalDate > dateStr) totalInTransit += qty;
+            replenishmentInTransit.forEach((info, arrivalDate) => {
+                if (arrivalDate > dateStr) totalInTransit += info.qty;
             });
 
-            // 4. 处理当日到货
-            const arrival1 = inTransitArrivals.get(dateStr) || 0;
-            const arrival2 = replenishmentInTransit.get(dateStr) || 0;
-            const inboundToday = arrival1 + arrival2;
+            // 2. 累积当日需求
+            currentBacklog += dailySales;
+
+            // 3. 处理当日到货
+            const historyArrival = inTransitArrivals.get(dateStr) || 0;
+            const replenishmentArrival = replenishmentInTransit.get(dateStr);
+            const simArrival = replenishmentArrival?.qty || 0;
+            const inboundToday = historyArrival + simArrival;
+            const inboundIndex = replenishmentArrival?.index;
             currentStock += inboundToday;
 
-            // 5. 履行欠单 (优先从库存中扣抵之前的积压需求)
+            // 4. 履行出库
             const fulfillment = Math.min(currentStock, currentBacklog);
             currentStock -= fulfillment;
             currentBacklog -= fulfillment;
 
+            // --- 5. 核心：日级精确滚动对齐 ---
+
+            // A. 计算安全库存点 (SS) - 基于最小销售周期
+            const ssEndDate = new Date(date);
+            ssEndDate.setMonth(ssEndDate.getMonth() + editSafetyStock);
+            const ssWindowDays = Math.max(1, Math.round((ssEndDate.getTime() - date.getTime()) / 86400000));
+
+            let dynamicSafetyStock = 0;
+            for (let j = 0; j < ssWindowDays; j++) {
+                dynamicSafetyStock += dayForecasts[i + j] || 0;
+            }
+            dynamicSafetyStock = Math.round(dynamicSafetyStock);
+
+            // B. 触发阈值与目标水位 - 基于安全库存 + 补货销售周期 + 交期消耗
+            const repEndDate = new Date(date);
+            repEndDate.setMonth(repEndDate.getMonth() + editReplenishmentCycle);
+            const repWindowDays = Math.max(0, Math.round((repEndDate.getTime() - date.getTime()) / 86400000));
+
+            let replenishmentBaseSum = 0;
+            for (let j = 0; j < repWindowDays; j++) {
+                replenishmentBaseSum += dayForecasts[i + j] || 0;
+            }
+
+            // --- 交期内需求计算 (用于 ROP 触发判断) ---
+            let leadTimeDemandSum = 0;
+            for (let j = 0; j < currentLeadTime; j++) {
+                leadTimeDemandSum += dayForecasts[i + ssWindowDays + j] || 0;
+            }
+
+            // 触发阈值 (ROP) = 动态安全库存 + 货期内需求预测
+            const targetThreshold = Math.round(dynamicSafetyStock + leadTimeDemandSum);
+            // 目标水位 (Target Level) = 安全库存 + 货期内需求 + 补货周期需求
+            const targetLevel = Math.round(dynamicSafetyStock + leadTimeDemandSum + replenishmentBaseSum);
+
             // 6. 触发补货判断
-            // 有效库存 = 实物库存 + 在途量 - (欠单/积压需求)
             const effectiveStock = currentStock + totalInTransit - currentBacklog;
 
             let isRestock = false;
             let restockQty = 0;
+            let currentRestockIndex: number | undefined;
 
-            if (effectiveStock < targetRopLevel) {
+            if (effectiveStock < targetThreshold) {
                 isRestock = true;
+                currentRestockIndex = ++restockIndexCounter;
 
-                // --- 逻辑优化：目标水位确保 ---
-                // 目标水位：补货点 (ROP) + 30天的预计出库消耗量 (确保能撑到下一个周期)
-                // 或者 ROP 的 2 倍，取较大值。
-                const targetLevel = Math.max(targetRopLevel * 2, targetRopLevel + (dailySales * 30));
-
-                // 计算需要补多少：目标水位 - 当前有效库存 (实物+在途-欠单)
-                let needed = targetLevel - effectiveStock;
-
-                // 最终补货量取 max(所需量, 经济订货量 EOQ)，并向上取整到 100
-                restockQty = Math.max(needed, eoq);
-                restockQty = Math.ceil(restockQty / 100) * 100;
+                const gap = targetLevel - effectiveStock;
+                restockQty = Math.max(gap, minOrderQty);
+                if (orderUnitQty > 1) {
+                    restockQty = Math.ceil(restockQty / orderUnitQty) * orderUnitQty;
+                }
 
                 const arrivalDateObj = new Date(date);
                 arrivalDateObj.setDate(arrivalDateObj.getDate() + currentLeadTime);
                 const arrivalDateStr = arrivalDateObj.toISOString().split('T')[0];
-
-                replenishmentInTransit.set(arrivalDateStr, (replenishmentInTransit.get(arrivalDateStr) || 0) + restockQty);
+                replenishmentInTransit.set(arrivalDateStr, { qty: restockQty, index: currentRestockIndex });
             }
 
             result.push({
                 date: dateStr,
                 stock: Math.round(currentStock),
                 backlog: Math.round(currentBacklog),
-                outbound: Math.round(fulfillment), // 新增：预测出库
-                rop: Math.round(targetRopLevel),
+                outbound: Math.round(fulfillment),
+                rop: Math.round(targetThreshold), // 这里的 rop 字段在图表中作为触发线（虽然 UI 上可能已隐藏，但数据对齐）
                 safetyStock: Math.round(dynamicSafetyStock),
-                inbound: inboundToday > 0 ? inboundToday : undefined,
+                totalInTransit: totalInTransit,
+                historyInbound: historyArrival > 0 ? historyArrival : undefined,
+                inbound: simArrival > 0 ? simArrival : undefined,
+                inboundIndex: simArrival > 0 ? inboundIndex : undefined,
                 restock: isRestock ? restockQty : undefined,
-                dailySales: Math.round(dailySales) // 对应：预测销售
+                restockIndex: isRestock ? currentRestockIndex : undefined,
+                dailySales: Math.round(dailySales)
             });
         }
         return result;
-    }, [data, editSafetyStock, currentLeadTime, eoq, dayOfWeekFactors, forecastOverrides, calculatedForecasts]);
+    }, [data, editSafetyStock, editReplenishmentCycle, currentLeadTime, eoq, dayOfWeekFactors, forecastOverrides, calculatedForecasts, minOrderQty, orderUnitQty]);
 
     return (
         <div className="bg-white rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] p-8 ring-1 ring-gray-100">
@@ -366,26 +377,21 @@ const InventorySimChart: React.FC<InventorySimChartProps> = ({
                     <p className="text-xs text-gray-400 mt-1">综合模拟基于未来预测的库存变化与智能补货点</p>
                 </div>
                 <div className="flex items-center gap-6 text-xs">
-                    {/* Legend */}
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-blue-500/20 border border-blue-500"></div>
-                        <span className="text-gray-600">预测实物库存 (左轴)</span>
+                        <span className="text-gray-600">预测实物库存</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-red-500/20 border border-red-500"></div>
-                        <span className="text-gray-600">预测欠单 (左轴)</span>
+                        <span className="text-gray-600">预测欠单</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-1 bg-orange-500 rounded-full"></div>
-                        <span className="text-gray-600">ROP (右轴)</span>
+                        <span className="text-gray-600">ROP</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-1 bg-emerald-500 rounded-full"></div>
-                        <span className="text-gray-600">安全库存 (右轴)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                        <span className="text-gray-600">触发补货</span>
+                        <span className="text-gray-600">安全库存</span>
                     </div>
                 </div>
             </div>
@@ -410,41 +416,27 @@ const InventorySimChart: React.FC<InventorySimChartProps> = ({
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
 
-                                {/* X轴 */}
                                 <XAxis
                                     dataKey="date"
-                                    tickFormatter={(val) => val.slice(5)} // MM-DD
+                                    tickFormatter={(val) => val.slice(5)}
                                     tick={{ fontSize: 10, fill: '#94A3B8' }}
-                                    minTickGap={40}
+                                    minTickGap={20}
+                                    interval="preserveStartEnd"
                                     axisLine={false}
                                     tickLine={false}
                                     dy={10}
                                 />
 
-                                {/* 左Y轴：库存 */}
                                 <YAxis
                                     yAxisId="left"
                                     axisLine={false}
                                     tickLine={false}
-                                    tick={{ fontSize: 10, fill: '#3B82F6' }}
+                                    tick={{ fontSize: 10, fill: '#64748B' }}
                                     tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(1)}k` : val}
-                                    label={{ value: '库存数量', angle: -90, position: 'insideLeft', style: { fill: '#94A3B8', fontSize: 10 } }}
-                                />
-
-                                {/* 右Y轴：ROP/安全库存 */}
-                                <YAxis
-                                    yAxisId="right"
-                                    orientation="right"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fontSize: 10, fill: '#F97316' }}
-                                    tickFormatter={(val) => val >= 1000 ? `${(val / 1000).toFixed(1)}k` : val}
-                                    label={{ value: '安全库存/ROP', angle: 90, position: 'insideRight', style: { fill: '#94A3B8', fontSize: 10 } }}
                                 />
 
                                 <Tooltip content={<CustomTooltip />} />
 
-                                {/* 1. 库存Area (左轴) 改为 linear 以清晰展示每日斜率变化 */}
                                 <Area
                                     yAxisId="left"
                                     type="linear"
@@ -455,7 +447,6 @@ const InventorySimChart: React.FC<InventorySimChartProps> = ({
                                     activeDot={{ r: 4, fill: '#fff', stroke: '#3B82F6', strokeWidth: 2 }}
                                 />
 
-                                {/* 1.1 欠单Area (左轴) */}
                                 <Area
                                     yAxisId="left"
                                     type="linear"
@@ -467,9 +458,8 @@ const InventorySimChart: React.FC<InventorySimChartProps> = ({
                                     activeDot={{ r: 3, fill: '#fff', stroke: '#EF4444', strokeWidth: 2 }}
                                 />
 
-                                {/* 2. ROP Line (右轴) */}
                                 <Line
-                                    yAxisId="right"
+                                    yAxisId="left"
                                     type="linear"
                                     dataKey="rop"
                                     stroke="#F97316"
@@ -479,9 +469,8 @@ const InventorySimChart: React.FC<InventorySimChartProps> = ({
                                     activeDot={false}
                                 />
 
-                                {/* 3. 安全库存 Line (右轴) */}
                                 <Line
-                                    yAxisId="right"
+                                    yAxisId="left"
                                     type="linear"
                                     dataKey="safetyStock"
                                     stroke="#10B981"
@@ -491,45 +480,52 @@ const InventorySimChart: React.FC<InventorySimChartProps> = ({
                                     activeDot={false}
                                 />
 
-                                {/* 4. 补货触发点 (Scatter) */}
                                 <Scatter
-                                    yAxisId="right"
+                                    yAxisId="left"
                                     dataKey="restock"
-                                    fill="#8B5CF6"
+                                    fill="#EF4444"
                                     line={false}
                                     shape={(props: any) => {
                                         const { cx, cy, payload } = props;
                                         if (!payload.restock) return null;
+                                        const dateLabel = payload.date?.slice(5) || '';
+                                        const qtyLabel = Math.round(payload.restock);
                                         return (
                                             <g>
-                                                <circle cx={cx} cy={cy} r={5} fill="#8B5CF6" fillOpacity={0.8} />
-                                                <text x={cx} y={cy - 8} textAnchor="middle" fill="#8B5CF6" fontSize={8} fontWeight="bold">
-                                                    补
+                                                <circle cx={cx} cy={cy} r={24} fill="#EF4444" fillOpacity={0.15} stroke="#EF4444" strokeWidth={2} />
+                                                <text x={cx} y={cy - 4} textAnchor="middle" fill="#000" fontSize={10} fontWeight="900">
+                                                    补{payload.restockIndex}-{qtyLabel}
+                                                </text>
+                                                <text x={cx} y={cy + 10} textAnchor="middle" fill="#1F2937" fontSize={9} fontWeight="700">
+                                                    {dateLabel}
                                                 </text>
                                             </g>
                                         );
                                     }}
                                 />
-                                {/* 5. 到货点 (Scatter) */}
                                 <Scatter
                                     yAxisId="left"
                                     dataKey="inbound"
-                                    fill="#6366F1"
+                                    fill="#10B981"
                                     line={false}
                                     shape={(props: any) => {
                                         const { cx, cy, payload } = props;
                                         if (!payload.inbound) return null;
+                                        const dateLabel = payload.date?.slice(5) || '';
+                                        const qtyLabel = Math.round(payload.inbound);
                                         return (
                                             <g>
-                                                <circle cx={cx} cy={cy} r={4} fill="#6366F1" stroke="#fff" strokeWidth={1} />
-                                                <text x={cx} y={cy - 6} textAnchor="middle" fill="#6366F1" fontSize={8} fontWeight="bold">
-                                                    +
+                                                <circle cx={cx} cy={cy} r={24} fill="#10B981" fillOpacity={0.15} stroke="#10B981" strokeWidth={2} />
+                                                <text x={cx} y={cy - 4} textAnchor="middle" fill="#7C3AED" fontSize={10} fontWeight="900">
+                                                    入{payload.inboundIndex}-{qtyLabel}
+                                                </text>
+                                                <text x={cx} y={cy + 10} textAnchor="middle" fill="#6D28D9" fontSize={9} fontWeight="700">
+                                                    {dateLabel}
                                                 </text>
                                             </g>
                                         );
                                     }}
                                 />
-
                             </ComposedChart>
                         </ResponsiveContainer>
                     </div>

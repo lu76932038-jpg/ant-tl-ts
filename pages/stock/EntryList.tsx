@@ -33,7 +33,8 @@ const EntryList: React.FC = () => {
     const fetchEntryList = async () => {
         setIsLoading(true);
         try {
-            const data: any = await api.get('/entrylist');
+            // Fix route path to match backend: /entry-list
+            const data: any = await api.get('/entry-list');
             setRecords(data);
         } catch (error) {
             console.error('Failed to fetch entry list:', error);

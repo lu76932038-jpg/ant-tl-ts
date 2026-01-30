@@ -51,6 +51,8 @@ export class SupplierStrategyModel {
                     is_default BOOLEAN DEFAULT FALSE,
                     lead_time_fast INT DEFAULT 7,
                     lead_time_economic INT DEFAULT 30,
+                    min_order_qty INT DEFAULT 1,
+                    order_unit_qty INT DEFAULT 1,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     UNIQUE KEY idx_sku_supplier (sku, supplier_code)
                 );
@@ -120,6 +122,8 @@ export class SupplierStrategyModel {
             isDefault: !!config.is_default,
             leadTimeFast: config.lead_time_fast,
             leadTimeEconomic: config.lead_time_economic,
+            minOrderQty: config.min_order_qty || 1,
+            orderUnitQty: config.order_unit_qty || 1,
             priceTiers: tiers
         };
     }
@@ -143,7 +147,7 @@ export class SupplierStrategyModel {
         await connection.beginTransaction();
 
         try {
-            const { name, code, priceTiers, leadTimeFast, leadTimeEconomic } = supplierInfo;
+            const { name, code, priceTiers, leadTimeFast, leadTimeEconomic, minOrderQty, orderUnitQty } = supplierInfo;
 
             // 1. 确保供应商主档存在 (Upsert)
             await connection.execute(
@@ -160,13 +164,15 @@ export class SupplierStrategyModel {
 
             // 2. 更新 SKU-供应商 关系表 (并设为 default)
             const [configResult] = await connection.execute<ResultSetHeader>(
-                `INSERT INTO product_supplier_strategies (sku, supplier_code, lead_time_fast, lead_time_economic, is_default)
-                 VALUES (?, ?, ?, ?, TRUE)
+                `INSERT INTO product_supplier_strategies (sku, supplier_code, lead_time_fast, lead_time_economic, min_order_qty, order_unit_qty, is_default)
+                 VALUES (?, ?, ?, ?, ?, ?, TRUE)
                  ON DUPLICATE KEY UPDATE 
                     lead_time_fast = VALUES(lead_time_fast),
                     lead_time_economic = VALUES(lead_time_economic),
+                    min_order_qty = VALUES(min_order_qty),
+                    order_unit_qty = VALUES(order_unit_qty),
                     is_default = TRUE`,
-                [sku, code, leadTimeFast || 7, leadTimeEconomic || 30]
+                [sku, code, leadTimeFast || 7, leadTimeEconomic || 30, minOrderQty || 1, orderUnitQty || 1]
             );
 
             // 获取生成的 ID (如果是 INSERT 则取 insertId，如果是 UPDATE 则需要查询一次)

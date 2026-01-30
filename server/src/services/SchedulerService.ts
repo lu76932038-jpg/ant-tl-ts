@@ -42,17 +42,33 @@ export class SchedulerService {
 
             const inStock = product.inStock;
 
-            // 2. Get In Transit
+            // 2. Get In Transit (Entry List)
             const pendingEntries = await EntryListModel.findPendingEntries(sku);
-            const inTransit = pendingEntries.reduce((sum, e) => sum + e.quantity, 0);
+            const inTransitEntries = pendingEntries.reduce((sum, e) => sum + e.quantity, 0);
 
-            // 3. Get Forecast for Current Month
+            // 3. Anti-Duplicate Logic: Check if AUTO plan created within last 5 mins
+            const { PurchasePlanModel } = require('../models/PurchasePlan');
+            const allPlans = await PurchasePlanModel.findAll();
+
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+            const alreadyCreatedRecently = allPlans.some((p: any) => {
+                const planTime = new Date(p.created_at || p.order_date);
+                return p.sku === sku &&
+                    p.source === 'AUTO' &&
+                    planTime > fiveMinutesAgo;
+            });
+
+            if (alreadyCreatedRecently) {
+                console.log(`[Scheduler] Skipping ${sku}, AUTO plan created recently (within 5 mins).`);
+                return;
+            }
+
+            // 4. Calculate Forecast & ROP
             const now = new Date();
             const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
             let monthlyForecast = 0;
             let forecasts: Record<string, number> = {};
-
             if (typeof strategy.calculated_forecasts === 'string') {
                 try { forecasts = JSON.parse(strategy.calculated_forecasts); } catch { }
             } else if (strategy.calculated_forecasts) {
@@ -62,18 +78,15 @@ export class SchedulerService {
             if (forecasts[monthKey]) {
                 monthlyForecast = forecasts[monthKey];
             } else {
-                // Return if no forecast, as we can't calculate ROP safely
                 return;
             }
 
-            // 4. Calculate Dynamic ROP
             const dailySales = monthlyForecast / 30;
             const leadTime = (strategy.replenishment_mode === 'fast' ? 7 : 30);
-
             const dynamicSafetyStock = dailySales * 30 * strategy.safety_stock_days;
             const dynamicRop = dynamicSafetyStock + (dailySales * leadTime);
 
-            const effectiveStock = inStock + inTransit;
+            const effectiveStock = inStock + inTransitEntries;
 
             // 5. Check Trigger
             if (effectiveStock < dynamicRop && monthlyForecast > 0) {
@@ -85,7 +98,7 @@ export class SchedulerService {
                 orderQty = Math.ceil(orderQty / 100) * 100; // Round to 100
 
                 if (orderQty > 0) {
-                    // Create PO
+                    // Create PO -> Now Plan
                     let supplierInfo: any = {};
                     try {
                         supplierInfo = strategy.supplier_info ?
@@ -93,15 +106,80 @@ export class SchedulerService {
                             : {};
                     } catch { }
 
-                    await PurchaseOrderModel.create({
+                    // Fix for Missing Price/LeadTime: Default to 1st tier if none selected
+                    if (supplierInfo.priceTiers && Array.isArray(supplierInfo.priceTiers) && supplierInfo.priceTiers.length > 0) {
+                        const hasSelected = supplierInfo.priceTiers.some((t: any) => t.isSelected);
+                        let selectedTier = supplierInfo.priceTiers.find((t: any) => t.isSelected);
+
+                        if (!hasSelected) {
+                            // Default to first tier if none selected
+                            supplierInfo.priceTiers = supplierInfo.priceTiers.map((t: any, idx: number) => ({
+                                ...t,
+                                isSelected: idx === 0
+                            }));
+                            selectedTier = supplierInfo.priceTiers[0];
+                        }
+
+                        // Lift leadTime to top level for UI display consistency
+                        if (selectedTier) {
+                            supplierInfo.leadTime = selectedTier.leadTime || selectedTier.leadTimeDays || 0;
+                        }
+                    }
+
+                    const timeZoneOffset = 8 * 60; // UTC+8
+                    const localDate = new Date(new Date().getTime() + timeZoneOffset * 60 * 1000);
+                    const orderDateStr = localDate.toISOString().split('T')[0];
+
+                    const { PurchasePlanModel } = require('../models/PurchasePlan');
+                    const planId = await PurchasePlanModel.create({
                         sku: sku,
                         product_name: product.name || sku,
                         quantity: orderQty,
                         supplier_info: JSON.stringify(supplierInfo),
-                        order_date: new Date().toISOString().split('T')[0]
+                        order_date: orderDateStr,
+                        source: 'AUTO'
                     });
 
-                    console.log(`[Scheduler] Created Auto-PO for ${sku}. Qty: ${orderQty}`);
+                    console.log(`[Scheduler] Created Auto-Plan for ${sku}. Qty: ${orderQty}, PlanID: ${planId}`);
+
+                    // Send Email Notification
+                    try {
+                        const { UserModel } = require('../models/User');
+                        const recipients = await UserModel.findStockNotificationRecipients();
+
+                        await PurchasePlanModel.updateEmailStatus(planId, {
+                            status: 'PENDING',
+                            recipients,
+                            sent_at: new Date().toISOString()
+                        });
+
+                        if (recipients.length > 0) {
+                            const { sendPurchaseOrderNotification } = require('../services/emailService');
+                            await sendPurchaseOrderNotification(recipients, {
+                                sku: sku,
+                                product_name: product.name || sku,
+                                quantity: orderQty,
+                                plan_id: planId,
+                                supplier_info: supplierInfo,
+                                order_date: orderDateStr,
+                                source: 'AUTO'
+                            });
+
+                            await PurchasePlanModel.updateEmailStatus(planId, {
+                                status: 'SENT',
+                                recipients,
+                                sent_at: new Date().toISOString()
+                            });
+                        }
+                    } catch (err: any) {
+                        console.error('[Scheduler] Failed to send notification:', err);
+                        await PurchasePlanModel.updateEmailStatus(planId, {
+                            status: 'FAILED',
+                            error: err.message,
+                            sent_at: new Date().toISOString()
+                        });
+                    }
+
 
                     // Audit Log
                     await StrategyModel.addLog({

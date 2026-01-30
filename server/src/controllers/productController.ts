@@ -7,6 +7,7 @@ import { EntryListModel } from '../models/EntryList';
 import pool from '../config/database';
 import { SupplierStrategyModel } from '../models/SupplierStrategy';
 import ARIMA from 'arima';
+import { StockService } from '../services/stockService';
 
 // Define TS interface for chart data
 interface ChartData {
@@ -65,7 +66,7 @@ export class ProductController {
             // Default strategy if missing
             if (!strategy) {
                 strategy = {
-                    sku, forecast_cycle: 6, safety_stock_days: 0.6, service_level: 0.95, rop: 330, eoq: 1500
+                    sku, forecast_cycle: 6, safety_stock_days: 1, service_level: 0.95, rop: 330, eoq: 1500
                 };
             }
 
@@ -222,12 +223,7 @@ export class ProductController {
 
             const safetyStockDays = (strategy.safety_stock_days || 0) * 30;
 
-            let stockoutRisk = '低';
-            if (turnoverDays < currentLeadTime) {
-                stockoutRisk = '高';
-            } else if (turnoverDays < (currentLeadTime + safetyStockDays)) {
-                stockoutRisk = '中';
-            }
+            const stockoutRisk = StockService.calculateRiskLevel(turnoverDays, currentLeadTime, safetyStockDays);
 
             // 2.4 Historical Inbound
             const [inboundHistory] = await pool.execute<RowDataPacket[]>(
@@ -290,7 +286,7 @@ export class ProductController {
             // PREDICT
             let forecastQty: number[] = [];
             let forecastCustomers: number[] = [];
-            const forecastHorizon = 6;
+            const forecastHorizon = 36;
 
             // Helper for prediction
             const predictSeries = (series: number[]): number[] => {

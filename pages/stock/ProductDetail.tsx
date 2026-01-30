@@ -23,9 +23,14 @@ import DeadStockConfig from './components/DeadStockConfig';
 import ForecastDataGrid from './components/ForecastDataGrid';
 import SalesForecastChart from './components/SalesForecastChart';
 import InventorySimChart from './components/InventorySimChart';
+import StockingConfig from './components/StockingConfig';
+import { useAuth } from '../../context/AuthContext';
+import ForecastPermissionModal from './components/ForecastPermissionModal'; // Task 48
+import { Lock } from 'lucide-react';
 
 // --- Component ---
 const ProductDetail: React.FC = () => {
+    const { user } = useAuth(); // Task 48: Auth Context
     // ... hooks logic unchanged
     const { sku } = useParams<{ sku: string }>();
     const [data, setData] = useState<ProductDetailData | null>(null);
@@ -36,7 +41,9 @@ const ProductDetail: React.FC = () => {
     const [isSaving, setIsSaving] = useState(false);
 
     // UI States
-    const [editSafetyStock, setEditSafetyStock] = useState<number>(3);
+    const [editSafetyStock, setEditSafetyStock] = useState<number>(3); // 最小销售周期 (月)
+    const [editReplenishmentCycle, setEditReplenishmentCycle] = useState<number>(3); // 补货销售周期 (月)
+    const [editBufferDays, setEditBufferDays] = useState<number>(30);  // 安全库存缓冲天数
     const [selectedStartMonth, setSelectedStartMonth] = useState<string>(''); // For Start Year-Month
     const [selectedForecastMonth, setSelectedForecastMonth] = useState<string>(''); // For Forecast Year-Month
     const [replenishmentMode, setReplenishmentMode] = useState<'fast' | 'economic'>('economic');
@@ -59,18 +66,29 @@ const ProductDetail: React.FC = () => {
     // V3.0.1 任务11: 补货设置状态
     const [autoReplenishment, setAutoReplenishment] = useState(false);
     const [autoReplenishmentTime, setAutoReplenishmentTime] = useState('08:00');
+    // V3.0.1 任务55 & 57
+    const [deadStockDays, setDeadStockDays] = useState<number>(180);
+    const [isStockingEnabled, setIsStockingEnabled] = useState<boolean>(true);
+    // V3.0.1 Task 48: Data Permission
+    const [authorizedIds, setAuthorizedIds] = useState<number[]>([]);
+    const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
+
     // Daily Seasonality
     const [dayOfWeekFactors, setDayOfWeekFactors] = useState<number[]>([]);
 
     // 已保存的策略参数值（用于检测未保存变更）
     const [savedStrategyValues, setSavedStrategyValues] = useState<{
         safetyStock: number;
+        replenishmentCycle: number;
+        bufferDays: number;
         replenishmentMode: 'fast' | 'economic';
     } | null>(null);
 
     // 计算是否有未保存的变更
     const hasUnsavedChanges = savedStrategyValues !== null && (
         savedStrategyValues.safetyStock !== editSafetyStock ||
+        savedStrategyValues.replenishmentCycle !== editReplenishmentCycle ||
+        savedStrategyValues.bufferDays !== editBufferDays ||
         savedStrategyValues.replenishmentMode !== replenishmentMode
     );
 
@@ -153,7 +171,9 @@ const ProductDetail: React.FC = () => {
             setStrategy(result.strategy);
             setSupplier(result.supplier);
             setEditSupplierInfo(result.supplier);
-            setEditSafetyStock(result.strategy.safety_stock_days);
+            setEditSafetyStock(result.strategy.safety_stock_days || 3);
+            setEditReplenishmentCycle(result.strategy.replenishment_sales_cycle || 3);
+            setEditBufferDays(result.strategy.buffer_days !== undefined ? result.strategy.buffer_days : 30);
 
             // Populate Forecast States
             if (result.strategy.benchmark_type) setBenchmarkType(result.strategy.benchmark_type as any);
@@ -174,9 +194,23 @@ const ProductDetail: React.FC = () => {
             if (result.strategy.auto_replenishment !== undefined) setAutoReplenishment(result.strategy.auto_replenishment);
             if (result.strategy.auto_replenishment_time) setAutoReplenishmentTime(result.strategy.auto_replenishment_time);
 
+            // V3.0.1 任务55 & 57
+            if (result.strategy.dead_stock_days) setDeadStockDays(result.strategy.dead_stock_days);
+            if (result.strategy.is_stocking_enabled !== undefined) setIsStockingEnabled(result.strategy.is_stocking_enabled);
+
+            // V3.0.1 Task 48: Load Permissions
+            if (result.strategy.authorized_viewer_ids) {
+                let ids = result.strategy.authorized_viewer_ids;
+                // Handle potential string format from legacy DB
+                if (typeof ids === 'string') { try { ids = JSON.parse(ids); } catch { ids = []; } }
+                setAuthorizedIds(Array.isArray(ids) ? ids : []);
+            }
+
             // 保存初始值用于检测变更
             setSavedStrategyValues({
                 safetyStock: result.strategy.safety_stock_days || 3,
+                replenishmentCycle: result.strategy.replenishment_sales_cycle || 3,
+                bufferDays: result.strategy.buffer_days !== undefined ? result.strategy.buffer_days : 30,
                 replenishmentMode: result.strategy.replenishment_mode || 'economic'
             });
 
@@ -209,16 +243,19 @@ const ProductDetail: React.FC = () => {
     };
 
 
-    const handleSaveStrategy = async (supplierOverride?: SupplierInfo) => {
+    const handleSaveStrategy = async (supplierOverride?: SupplierInfo, newAuthorizedIds?: number[]) => {
         if (!strategy) return;
         setIsSaving(true);
         try {
             const supplierToSave = supplierOverride || editSupplierInfo;
+            const idsToSave = newAuthorizedIds !== undefined ? newAuthorizedIds : authorizedIds;
+
             const result: any = await api.post(`/products/${sku}/strategy`, {
                 ...strategy,
                 start_year_month: selectedStartMonth,
                 forecast_year_month: selectedForecastMonth,
                 safety_stock_days: editSafetyStock,
+                replenishment_sales_cycle: editReplenishmentCycle,
                 replenishment_mode: replenishmentMode, // Save replenishment mode
                 benchmark_type: benchmarkType,
                 mom_range: momRange,
@@ -231,10 +268,18 @@ const ProductDetail: React.FC = () => {
                 calculated_forecasts: calculatedForecasts,
                 supplier_info: supplierToSave,
                 // V3.0.1 任务11: 补货设置
-                auto_replenishment: autoReplenishment,
+                // Task 56 Correction: If stocking is disabled, FORCE auto_replenishment to false
+                auto_replenishment: isStockingEnabled ? autoReplenishment : false,
                 auto_replenishment_time: autoReplenishmentTime,
+
+                // V3.0.1 任务55 & 57
+                dead_stock_days: deadStockDays,
+                is_stocking_enabled: isStockingEnabled,
+                // V3.0.1 Task 48
+                authorized_viewer_ids: idsToSave,
                 // V3.0.1 任务11: 详细日志记录
-                log_content: `更新库存策略配置: 安全库存 ${editSafetyStock} 个月, 补货模式: ${replenishmentMode === 'fast' ? '快速补货(7天)' : '经济补货(30天)'}, 补货方式: ${autoReplenishment ? '自动(' + autoReplenishmentTime + ')' : '手动'}`
+                log_content: `更新库存策略配置: 备库 ${isStockingEnabled ? '启用' : '关闭'}, 呆滞 ${deadStockDays}天, 缓冲 ${editBufferDays}天, 最细周期 ${editSafetyStock}个月, 补货周期 ${editReplenishmentCycle}个月, 补货方式: ${autoReplenishment ? '自动(' + autoReplenishmentTime + ')' : '手动'}`,
+                buffer_days: editBufferDays
             });
             // Refresh data
             // Refresh data
@@ -250,6 +295,8 @@ const ProductDetail: React.FC = () => {
             // 更新已保存的策略值
             setSavedStrategyValues({
                 safetyStock: editSafetyStock,
+                replenishmentCycle: editReplenishmentCycle,
+                bufferDays: editBufferDays,
                 replenishmentMode: replenishmentMode
             });
             alert('策略更新成功！(系统自动审批通过)');
@@ -409,20 +456,23 @@ const ProductDetail: React.FC = () => {
             // Bar 1 (Bottom): ActualQty
             // Bar 2 (Top): ForecastRemainder = Max(0, BaseForecast - ActualQty)
             const actual = d.actualQty || 0;
-            const remainder = Math.max(0, baseForecast - actual);
+
+            // 任务49: 预测数据只会显示在时间大于等于今天 (包含本月)
+            const isPast = monthKey < currentMonthKey;
+            const remainder = isPast ? 0 : Math.max(0, baseForecast - actual);
 
             // Recalculate forecast amount
             const finalForecastQty = actual + remainder;
             const useOriginalAmount = d.forecastAmount && d.forecastAmount > 0 && baseForecast === d.forecastQty;
-            const finalForecastAmount = useOriginalAmount
+            const finalForecastAmount = isPast ? null : (useOriginalAmount // Past: Hide Forecast
                 ? d.forecastAmount
-                : Math.round(finalForecastQty * price);
+                : Math.round(finalForecastQty * price));
 
             // Recalculate forecast customers
             const useOriginalCust = d.forecastCustomerCount && d.forecastCustomerCount > 0 && baseForecast === d.forecastQty;
-            const finalForecastCustomerCount = useOriginalCust
+            const finalForecastCustomerCount = isPast ? null : (useOriginalCust // Past: Hide Forecast
                 ? d.forecastCustomerCount
-                : Math.round(finalForecastQty * custRatio);
+                : Math.round(finalForecastQty * custRatio));
 
             // Determine if strictly future
             const isStrictlyFuture = monthKey > currentMonthKey;
@@ -430,7 +480,7 @@ const ProductDetail: React.FC = () => {
             return {
                 ...d,
                 forecastQty: finalForecastQty, // Total height for reference
-                forecastRemainder: remainder, // The part to stack on top of actual
+                forecastRemainder: remainder, // The part to stack on top of actual (0 for past)
                 forecastAmount: finalForecastAmount,
                 forecastCustomerCount: finalForecastCustomerCount,
                 actualQty: actual,
@@ -466,11 +516,23 @@ const ProductDetail: React.FC = () => {
                 y.simStock += d.simStock;
                 y.count++;
             });
-            return Array.from(yearMap.values()).map(y => ({
-                ...y,
-                simStock: Math.round(y.simStock / y.count),
-                simRop: 0, simSafety: 0
-            }));
+            return Array.from(yearMap.values()).map(y => {
+                // Task 49: If year is in the past, hide forecast data entirely (set to null)
+                // This prevents the green dashed line from dropping to 0 for past years
+                const isPastYear = parseInt(y.month) < currentYear;
+
+                return {
+                    ...y,
+                    simStock: Math.round(y.simStock / y.count),
+                    simRop: 0, simSafety: 0,
+                    // If past year, force forecasts to null to break the line on chart
+                    forecastQty: isPastYear ? null : y.forecastQty,
+                    forecastAmount: isPastYear ? null : y.forecastAmount,
+                    forecastCustomerCount: isPastYear ? null : y.forecastCustomerCount,
+                    // Ensure forecast remainder is also cleared
+                    forecastRemainder: isPastYear ? 0 : y.forecastRemainder
+                };
+            });
         }
         return chartData;
     };
@@ -688,30 +750,57 @@ const ProductDetail: React.FC = () => {
     };
 
 
-    const handleCreatePO = async () => {
-        if (!data || !strategy) return;
-        if (!confirm('确定要根据当期建议生成采购单吗？')) return;
+    // V3.0.1: 生成采购计划并立即更新在途库存
+    const handleCreatePlan = async (qty: number) => {
+        if (!data || !strategy || qty <= 0) return;
+        if (!confirm(`确定要生成 ${qty.toLocaleString()} 件的采购计划吗？\n生成后将立即计入在途库存。`)) return;
 
         setIsCreatingPO(true);
         try {
-            const qty = strategy.eoq || 0;
             const supplierName = editSupplierInfo?.name || '未知供应商';
 
-            await api.post('/purchase-orders', {
+            // 确保供应商信息的完整性（特别是价格）
+            let finalSupplierInfo: any = editSupplierInfo || {};
+            // 如果没有选中的价格层级，尝试选中第一个
+            if (finalSupplierInfo.priceTiers && finalSupplierInfo.priceTiers.length > 0) {
+                const hasSelected = finalSupplierInfo.priceTiers.some((t: any) => t.isSelected);
+                if (!hasSelected) {
+                    finalSupplierInfo = {
+                        ...finalSupplierInfo,
+                        priceTiers: finalSupplierInfo.priceTiers.map((t: any, index: number) => ({
+                            ...t,
+                            isSelected: index === 0 // 默认选中第一个
+                        }))
+                    };
+                }
+            }
+
+            // 2. 提取选中层级的货期，提升到顶层 supplier.leadTime
+            if (finalSupplierInfo.priceTiers) {
+                const selectedTier = finalSupplierInfo.priceTiers.find((t: any) => t.isSelected);
+                if (selectedTier) {
+                    finalSupplierInfo.leadTime = selectedTier.leadTime || selectedTier.leadTimeDays || 0;
+                }
+            }
+
+            // 1. 调用独立接口创建采购计划
+            await api.post('/purchase-plans', {
                 sku: data.basic.sku,
                 product_name: data.basic.name,
                 quantity: qty,
                 order_date: new Date().toISOString().split('T')[0],
-                supplier_info: JSON.stringify(editSupplierInfo || {}),
-                status: 'DRAFT',
-                log_content: `生成采购单: 建议补货数量 ${qty.toLocaleString()} 件, 供应商: ${supplierName}`
+                supplier_info: JSON.stringify(finalSupplierInfo),
+                status: 'PLAN',
+                source: 'MANUAL' // 标记为手动生成
             });
 
-            alert('采购单草稿生成成功！请前往采购管理查看。');
+            // V3.0.2 变更：采购计划仅作为意向，不计入在途库存。只有转为正式 PO 后才计入。
+            // 因此此处移除 setData 更新 inTransit 的逻辑。
+
+            alert('采购计划生成成功！\n请前往“采购计划”页面进行审核与转单。');
         } catch (e: any) {
             console.error(e);
-            const errorMsg = e.response?.data?.error || e.message || '网络连接失败';
-            alert(`采购单生成失败：${errorMsg}`);
+            alert(`生成失败：${e.message}`);
         } finally {
             setIsCreatingPO(false);
         }
@@ -793,6 +882,18 @@ const ProductDetail: React.FC = () => {
                             </span>
                         </div>
                         <div className="w-px h-6 bg-gray-200 print:hidden"></div>
+
+                        {/* Task 48: Permission Button (Admin Only) */}
+                        {(!user || user.role === 'admin') && (
+                            <button
+                                onClick={() => setIsPermissionModalOpen(true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm print:hidden"
+                            >
+                                <Lock size={14} />
+                                <span className="hidden sm:inline">权限配置</span>
+                            </button>
+                        )}
+
                         <button
                             onClick={() => window.print()}
                             className="bg-black text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors shadow-sm active:scale-95 transform duration-100 print:hidden"
@@ -808,78 +909,121 @@ const ProductDetail: React.FC = () => {
                     {/* KPI Cards */}
                     <KPISection data={data} supplier={supplier} />
 
+                    {/* Permission Modal */}
+                    <ForecastPermissionModal
+                        isOpen={isPermissionModalOpen}
+                        onClose={() => setIsPermissionModalOpen(false)}
+                        authorizedIds={authorizedIds}
+                        onSave={(ids) => {
+                            setAuthorizedIds(ids);
+                            handleSaveStrategy(undefined, ids);
+                        }}
+                    />
+
                     {/* Main Content Grid */}
                     {/* Main Content Grid (1:4:1 Ratio -> 2:8:2 cols) */}
                     <div className="grid grid-cols-12 gap-6 items-start">
 
-                        {/* Left Column: Configuration (2 cols) - Sticky */}
                         <div className="col-span-2 space-y-6 sticky top-[100px] self-start">
 
-                            {/* 0. Sales Forecast Config */}
-                            {/* 0. Sales Forecast Config */}
-                            <ForecastConfig
+                            {/* New: Stocking Config (Task 56 & 57) */}
+                            <StockingConfig
+                                enabled={isStockingEnabled}
+                                setEnabled={setIsStockingEnabled}
                                 isSaving={isSaving}
-                                onRunForecast={handleRunForecast}
-                                selectedStartMonth={selectedStartMonth}
-                                setSelectedStartMonth={setSelectedStartMonth}
-                                selectedForecastMonth={selectedForecastMonth}
-                                setSelectedForecastMonth={setSelectedForecastMonth}
-                                startOptions={startOptions}
-                                forecastOptions={forecastOptions}
-                                benchmarkType={benchmarkType}
-                                setBenchmarkType={setBenchmarkType}
-                                momRange={momRange}
-                                setMomRange={setMomRange}
-                                momTimeSliders={momTimeSliders}
-                                setMomTimeSliders={setMomTimeSliders}
-                                momWeightSliders={momWeightSliders}
-                                setMomWeightSliders={setMomWeightSliders}
-                                yoyRange={yoyRange}
-                                setYoyRange={setYoyRange}
-                                yoyWeightSliders={yoyWeightSliders}
-                                setYoyWeightSliders={setYoyWeightSliders}
-                                ratioAdjustment={ratioAdjustment}
-                                setRatioAdjustment={setRatioAdjustment}
                             />
 
+                            {/* 0. Sales Forecast Config (Permission Gated) */}
+                            {((!user || user.role === 'admin') || (user.id && authorizedIds.includes(user.id))) ? (
+                                <ForecastConfig
+                                    isSaving={isSaving}
+                                    onRunForecast={handleRunForecast}
+                                    selectedStartMonth={selectedStartMonth}
+                                    setSelectedStartMonth={setSelectedStartMonth}
+                                    selectedForecastMonth={selectedForecastMonth}
+                                    setSelectedForecastMonth={setSelectedForecastMonth}
+                                    startOptions={startOptions}
+                                    forecastOptions={forecastOptions}
+                                    benchmarkType={benchmarkType}
+                                    setBenchmarkType={setBenchmarkType}
+                                    momRange={momRange}
+                                    setMomRange={setMomRange}
+                                    momTimeSliders={momTimeSliders}
+                                    setMomTimeSliders={setMomTimeSliders}
+                                    momWeightSliders={momWeightSliders}
+                                    setMomWeightSliders={setMomWeightSliders}
+                                    yoyRange={yoyRange}
+                                    setYoyRange={setYoyRange}
+                                    yoyWeightSliders={yoyWeightSliders}
+                                    setYoyWeightSliders={setYoyWeightSliders}
+                                    ratioAdjustment={ratioAdjustment}
+                                    setRatioAdjustment={setRatioAdjustment}
+                                />
+                            ) : (
+                                <div className="bg-gray-50 rounded-xl p-6 text-center border border-gray-100 flex flex-col items-center gap-2">
+                                    <Lock className="text-gray-300" size={32} />
+                                    <div className="text-gray-400 font-bold text-sm">暂无预测配置权限</div>
+                                </div>
+                            )}
+
                             {/* 2. Dead Stock Config (Moved from Right) */}
-                            <DeadStockConfig />
+                            <DeadStockConfig
+                                deadStockDays={deadStockDays}
+                                setDeadStockDays={setDeadStockDays}
+                                lastOutboundDate={data?.charts?.find(c => c.outbound && c.outbound > 0)?.month || '无记录'}
+                                isSaving={isSaving}
+                                onSave={() => handleSaveStrategy()}
+                            />
 
                         </div>
                         {/* Middle Column: Visuals & Logs (8 cols) */}
                         <div className="col-span-8 space-y-6">
 
-                            {/* 2. Forecast Data Adjustment (New) */}
-                            <ForecastDataGrid
-                                isOpen={isForecastTableOpen}
-                                onToggle={() => setIsForecastTableOpen(!isForecastTableOpen)}
-                                forecastGrid={forecastGrid}
-                                forecastOverrides={forecastOverrides}
-                                setForecastOverrides={setForecastOverrides}
-                                calculatedForecasts={calculatedForecasts}
-                                dayOfWeekFactors={dayOfWeekFactors}
-                                isSaving={isSaving}
-                                onSave={() => handleSaveStrategy()}
-                                chartData={data.charts}
-                                // Forecast Configuration Parameters for Tooltip logic
-                                benchmarkType={benchmarkType}
-                                momRange={momRange}
-                                momTimeSliders={momTimeSliders}
-                                momWeightSliders={momWeightSliders}
-                                yoyRange={yoyRange}
-                                yoyWeightSliders={yoyWeightSliders}
-                                ratioAdjustment={ratioAdjustment}
-                                dailyActuals={data.kpi?.dailyActuals}
-                            />
+                            {/* 2. Forecast Data Adjustment (New) - Permission Gated */}
+                            {((!user || user.role === 'admin') || (user.id && authorizedIds.includes(user.id))) ? (
+                                <>
+                                    <ForecastDataGrid
+                                        isOpen={isForecastTableOpen}
+                                        onToggle={() => setIsForecastTableOpen(!isForecastTableOpen)}
+                                        forecastGrid={forecastGrid}
+                                        forecastOverrides={forecastOverrides}
+                                        setForecastOverrides={setForecastOverrides}
+                                        calculatedForecasts={calculatedForecasts}
+                                        dayOfWeekFactors={dayOfWeekFactors}
+                                        isSaving={isSaving}
+                                        onSave={() => handleSaveStrategy()}
+                                        chartData={data.charts}
+                                        // Forecast Configuration Parameters for Tooltip logic
+                                        benchmarkType={benchmarkType}
+                                        momRange={momRange}
+                                        momTimeSliders={momTimeSliders}
+                                        momWeightSliders={momWeightSliders}
+                                        yoyRange={yoyRange}
+                                        yoyWeightSliders={yoyWeightSliders}
+                                        ratioAdjustment={ratioAdjustment}
+                                        dailyActuals={data.kpi?.dailyActuals}
+                                    />
 
-                            {/* 1. Main Forecast & Inventory Simulation Chart - Nano Design Refactor */}
-                            <SalesForecastChart
-                                displayData={displayData}
-                                viewDimension={viewDimension}
-                                setViewDimension={setViewDimension}
-                                onExport={handleExportExcel}
-                                nowLabel={nowLabel}
-                            />
+                                    {/* 1. Main Forecast & Inventory Simulation Chart - Nano Design Refactor */}
+                                    <SalesForecastChart
+                                        displayData={displayData}
+                                        viewDimension={viewDimension}
+                                        setViewDimension={setViewDimension}
+                                        onExport={handleExportExcel}
+                                        nowLabel={nowLabel}
+                                    />
+                                </>
+                            ) : (
+                                <div className="bg-white rounded-2xl p-12 text-center border border-gray-100 shadow-sm flex flex-col items-center justify-center gap-4 min-h-[400px]">
+                                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center">
+                                        <Lock className="text-gray-300" size={32} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold text-gray-900">数据访问受限</h3>
+                                        <p className="text-sm text-gray-500 mt-1">您没有权限查看此产品的销售预测详情。请联系管理员添加权限。</p>
+                                    </div>
+                                </div>
+                            )}
                             {/* 3. Inventory Trend Simulation (Sawtooth) */}
                             {(() => {
                                 // Calculate dynamic lead time for simulation
@@ -892,11 +1036,14 @@ const ProductDetail: React.FC = () => {
                                     <InventorySimChart
                                         data={data}
                                         editSafetyStock={editSafetyStock}
+                                        editReplenishmentCycle={editReplenishmentCycle}
                                         currentLeadTime={effectiveLeadTime}
                                         eoq={strategy?.eoq || 500}
                                         dayOfWeekFactors={dayOfWeekFactors}
                                         forecastOverrides={forecastOverrides}
                                         calculatedForecasts={calculatedForecasts}
+                                        minOrderQty={editSupplierInfo?.minOrderQty || 1}
+                                        orderUnitQty={editSupplierInfo?.orderUnitQty || 1}
                                     />
                                 );
                             })()}
@@ -915,11 +1062,13 @@ const ProductDetail: React.FC = () => {
                                 onSave={() => handleSaveStrategy()}
                                 editSafetyStock={editSafetyStock}
                                 setEditSafetyStock={setEditSafetyStock}
+                                editReplenishmentCycle={editReplenishmentCycle}
+                                setEditReplenishmentCycle={setEditReplenishmentCycle}
                                 replenishmentMode={replenishmentMode}
                                 setReplenishmentMode={setReplenishmentMode}
                                 currentLeadTime={currentLeadTime}
                                 isCreatingPO={isCreatingPO}
-                                onCreatePO={handleCreatePO}
+                                onCreatePlan={handleCreatePlan}
                                 hasUnsavedChanges={hasUnsavedChanges}
                                 supplier={editSupplierInfo}
                                 onSelectTier={handleSelectTier}
@@ -927,6 +1076,7 @@ const ProductDetail: React.FC = () => {
                                 setAutoReplenishment={setAutoReplenishment}
                                 autoReplenishmentTime={autoReplenishmentTime}
                                 setAutoReplenishmentTime={setAutoReplenishmentTime}
+                                isStockingEnabled={isStockingEnabled}
                             />
                             {/* 2. Supplier Card (Moved from Left) */}
                             <SupplierCard

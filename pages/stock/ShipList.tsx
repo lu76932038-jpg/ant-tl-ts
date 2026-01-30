@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { read, utils } from 'xlsx';
 import {
     Download,
     ChevronLeft,
@@ -15,6 +16,7 @@ import {
     ArrowUpRight
 } from 'lucide-react';
 import { api } from '../../services/api';
+import { ImportDataModal } from './components/ImportDataModal';
 
 interface ShipRecord {
     id: number;
@@ -34,6 +36,7 @@ const ShipList: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [pageSize, setPageSize] = useState(15);
     const [currentPage, setCurrentPage] = useState(1);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
     useEffect(() => {
         fetchShipList();
@@ -81,6 +84,15 @@ const ShipList: React.FC = () => {
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-[#fafafa]">
+            <ImportDataModal
+                isOpen={isImportModalOpen}
+                onClose={() => setIsImportModalOpen(false)}
+                onSuccess={() => {
+                    fetchShipList();
+                    // Optional: Show global success toast if needed, but Modal already alerts
+                }}
+            />
+
             {/* Header */}
             <header className="h-16 flex items-center justify-between px-8 bg-white/80 backdrop-blur-md border-b border-gray-200/50 sticky top-0 z-30 transition-all">
                 <div className="flex items-center gap-3">
@@ -90,6 +102,14 @@ const ShipList: React.FC = () => {
                     <h1 className="text-lg font-bold tracking-tight text-slate-800">出库管理看板</h1>
                 </div>
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setIsImportModalOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
+                    >
+                        <ArrowUpRight size={16} />
+                        导入出库数据
+                    </button>
+                    {/* Existing Buttons */}
                     <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
                         <Filter size={16} />
                         筛选器

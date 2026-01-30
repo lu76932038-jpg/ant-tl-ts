@@ -15,6 +15,12 @@ export interface ProductStrategy {
     // Auto Replenishment
     auto_replenishment?: boolean;
     auto_replenishment_time?: string;
+    // Task 55/57
+    dead_stock_days?: number;
+    is_stocking_enabled?: boolean;
+    // Task 48 Permissions
+    authorized_viewer_ids?: any; // JSON number[]
+
     // New Forecast Config Fields
     benchmark_type?: 'mom' | 'yoy';
     mom_range?: number;
@@ -51,7 +57,7 @@ export class StrategyModel {
                     start_year_month VARCHAR(20) DEFAULT NULL,
                     forecast_cycle INT DEFAULT 6,
                     forecast_year_month VARCHAR(20) DEFAULT NULL,
-                    safety_stock_days DECIMAL(10, 2) DEFAULT 0.6,
+                    safety_stock_days DECIMAL(10, 2) DEFAULT 1,
                     service_level DECIMAL(10, 2) DEFAULT 0.95,
                     rop INT DEFAULT 0,
                     eoq INT DEFAULT 0,
@@ -66,6 +72,11 @@ export class StrategyModel {
                     calculated_forecasts JSON DEFAULT NULL,
                     supplier_info JSON DEFAULT NULL,
                     replenishment_mode VARCHAR(20) DEFAULT 'economic',
+                    auto_replenishment BOOLEAN DEFAULT FALSE,
+                    auto_replenishment_time VARCHAR(10) DEFAULT NULL,
+                    dead_stock_days INT DEFAULT 180,
+                    is_stocking_enabled BOOLEAN DEFAULT TRUE,
+                    authorized_viewer_ids JSON DEFAULT NULL,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 );
             `);
@@ -77,7 +88,7 @@ export class StrategyModel {
                 try {
                     await pool.execute(sql);
                 } catch (e: any) {
-                    if (e.code !== 'ER_DUP_FIELDNAME') {
+                    if (e.code !== 'ER_DUP_FIELDNAME' && e.code !== 'ER_DUP_KEYNAME') {
                         // console.log('Column already exists or other error:', e.message); 
                     }
                 }
@@ -96,6 +107,10 @@ export class StrategyModel {
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN replenishment_mode VARCHAR(20) DEFAULT 'economic'");
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN auto_replenishment BOOLEAN DEFAULT FALSE");
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN auto_replenishment_time VARCHAR(10) DEFAULT NULL");
+            // V3.0.1 New Columns
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN dead_stock_days INT DEFAULT 180");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN is_stocking_enabled BOOLEAN DEFAULT TRUE");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN authorized_viewer_ids JSON DEFAULT NULL");
 
             console.log('product_strategies table initialized/updated.');
 
@@ -134,7 +149,8 @@ export class StrategyModel {
             sku, start_year_month, forecast_cycle, forecast_year_month,
             safety_stock_days, service_level, rop, eoq,
             benchmark_type, mom_range, mom_time_sliders, mom_weight_sliders, yoy_range, yoy_weight_sliders, ratio_adjustment,
-            forecast_overrides, calculated_forecasts, supplier_info, replenishment_mode
+            forecast_overrides, calculated_forecasts, supplier_info, replenishment_mode,
+            dead_stock_days, is_stocking_enabled, authorized_viewer_ids
         } = strategy;
 
         await pool.execute(
@@ -143,9 +159,10 @@ export class StrategyModel {
                 safety_stock_days, service_level, rop, eoq,
                 benchmark_type, mom_range, mom_time_sliders, mom_weight_sliders, yoy_range, yoy_weight_sliders, ratio_adjustment,
                 forecast_overrides, calculated_forecasts, supplier_info, replenishment_mode,
-                auto_replenishment, auto_replenishment_time
+                auto_replenishment, auto_replenishment_time,
+                dead_stock_days, is_stocking_enabled, authorized_viewer_ids
             )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                 start_year_month = VALUES(start_year_month),
                 forecast_cycle = VALUES(forecast_cycle),
@@ -166,11 +183,14 @@ export class StrategyModel {
                 supplier_info = VALUES(supplier_info),
                 replenishment_mode = VALUES(replenishment_mode),
                 auto_replenishment = VALUES(auto_replenishment),
-                auto_replenishment_time = VALUES(auto_replenishment_time)
+                auto_replenishment_time = VALUES(auto_replenishment_time),
+                dead_stock_days = VALUES(dead_stock_days),
+                is_stocking_enabled = VALUES(is_stocking_enabled),
+                authorized_viewer_ids = VALUES(authorized_viewer_ids)
             `,
             [
                 sku, start_year_month || null, forecast_cycle || 6, forecast_year_month || null,
-                safety_stock_days ?? 0.6, service_level ?? 0.95, rop ?? 0, eoq ?? 0,
+                safety_stock_days ?? 1, service_level ?? 0.95, rop ?? 0, eoq ?? 0,
                 benchmark_type || 'mom', mom_range ?? 6,
                 mom_time_sliders ? JSON.stringify(mom_time_sliders) : null, mom_weight_sliders ? JSON.stringify(mom_weight_sliders) : null,
                 yoy_range ?? 3, yoy_weight_sliders ? JSON.stringify(yoy_weight_sliders) : null,
@@ -180,7 +200,10 @@ export class StrategyModel {
                 supplier_info ? JSON.stringify(supplier_info) : null,
                 replenishment_mode || 'economic',
                 strategy.auto_replenishment ?? false,
-                strategy.auto_replenishment_time ?? null
+                strategy.auto_replenishment_time ?? null,
+                dead_stock_days ?? 180,
+                is_stocking_enabled ?? true,
+                authorized_viewer_ids ? JSON.stringify(authorized_viewer_ids) : null
             ]
         );
     }

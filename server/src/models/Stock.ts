@@ -49,6 +49,14 @@ export class StockModel {
         return rows as Stock[];
     }
 
+    static async findBySku(sku: string): Promise<Stock | null> {
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            'SELECT * FROM StockList WHERE sku = ?',
+            [sku]
+        );
+        return (rows.length > 0 ? rows[0] : null) as Stock | null;
+    }
+
     static async create(stock: Omit<Stock, 'id'>): Promise<number> {
         const [result] = await pool.execute<ResultSetHeader>(
             'INSERT INTO StockList (sku, name, status, inStock, available, inTransit, unit) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -112,7 +120,8 @@ export class StockModel {
                 );
             }
 
-            // 当数据量不足 300 时，自动补充模拟数据至 300 条
+            // 当数据量不足 300 时，自动补充模拟数据至 300 条 - DISABLED V3.0.1
+            /*
             const targetCount = 300;
             if (currentCount < targetCount) {
                 console.log(`StockList table has ${currentCount} entries, supplementing to ${targetCount}...`);
@@ -140,6 +149,7 @@ export class StockModel {
                 }
                 console.log(`Supplemented ${itemsToGenerate} entries. Total count: ${targetCount}`);
             }
+            */
 
         } catch (error) {
             console.error('Error initializing StockList table:', error);

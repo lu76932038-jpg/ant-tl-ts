@@ -3,6 +3,7 @@ import { PurchaseOrderModel } from '../models/PurchaseOrder';
 import { EntryListModel } from '../models/EntryList';
 import { StockModel } from '../models/Stock';
 import { StrategyModel } from '../models/Strategy';
+import { UserModel } from '../models/User';
 import { ProductController } from './productController'; // Reuse simulation logic part if possible, but easier to reimplement simplified version
 // Given complexity of reusing method which is bound to request/response, better to extract logic or re-query.
 // For Suggestions, we need to iterate ALL products. This is heavy but requested.
@@ -76,9 +77,25 @@ export class PurchaseOrderController {
         try {
             // req.body: { sku, product_name, quantity, order_date, supplier_info }
             const id = await PurchaseOrderModel.create(req.body);
+
+            // Task 52: Send Notification
+            // Fire and forget - don't block response
+            (async () => {
+                try {
+                    const recipients = await UserModel.findStockNotificationRecipients();
+                    if (recipients.length > 0) {
+                        const { sendPurchaseOrderNotification } = require('../services/emailService');
+                        await sendPurchaseOrderNotification(recipients, req.body);
+                    }
+                } catch (err) {
+                    console.error('Failed to send PO notification:', err);
+                }
+            })();
+
             res.status(201).json({ id, message: 'PO Draft Created' });
-        } catch (error) {
-            res.status(500).json({ error: 'Failed to create PO' });
+        } catch (error: any) {
+            console.error('Create PO Failed:', error);
+            res.status(500).json({ error: `Failed to create PO: ${error.message || 'Unknown error'}` });
         }
     }
 

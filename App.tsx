@@ -18,6 +18,7 @@ import StockList from './pages/stock/StockList';
 import ShipList from './pages/stock/ShipList';
 import EntryList from './pages/stock/EntryList';
 import PurchaseOrderList from './pages/stock/PurchaseOrderList';
+import PurchasePlanList from './pages/stock/PurchasePlanList';
 import ProductDetail from './pages/stock/ProductDetail';
 import StockCommandCenter from './pages/stock/StockCommandCenter';
 import DashboardHome from './pages/DashboardHome';
@@ -53,14 +54,21 @@ const App: React.FC = () => {
                         <Route path="help" element={<HelpDocs />} />
                         <Route path="at-orders" element={<AtOrders />} />
 
-                        {/* 备货小助手 */}
-                        <Route path="stock" element={<StockList />} /> {/* 库存概览 */}
-                        <Route path="stock/shiplist" element={<StockList />} /> {/* Legacy mapping if needed, or redirect */}
-                        <Route path="stock/outbound" element={<ShipList />} /> {/* 出库清单 */}
-                        <Route path="stock/entrylist" element={<EntryList />} /> {/* 入库清单 */}
-                        <Route path="stock/purchase-orders" element={<PurchaseOrderList />} /> {/* 采购补货 */}
-                        <Route path="stock/product/:sku" element={<ProductDetail />} />
-                        <Route path="stock/help" element={<StockHelpCenter />} />
+                        {/* 备货小助手 (需要 stock_list 权限) */}
+                        <Route element={
+                            <ProtectedRoute requiredPermission="stock_list">
+                                <Outlet />
+                            </ProtectedRoute>
+                        }>
+                            <Route path="stock" element={<StockList />} />
+                            <Route path="stock/shiplist" element={<StockList />} />
+                            <Route path="stock/outbound" element={<ShipList />} />
+                            <Route path="stock/entrylist" element={<EntryList />} />
+                            <Route path="stock/purchase-plans" element={<PurchasePlanList />} />
+                            <Route path="stock/purchase-orders" element={<PurchaseOrderList />} />
+                            <Route path="stock/product/:sku" element={<ProductDetail />} />
+                            <Route path="stock/help" element={<StockHelpCenter />} />
+                        </Route>
 
                         <Route
                             path="train-invoice"

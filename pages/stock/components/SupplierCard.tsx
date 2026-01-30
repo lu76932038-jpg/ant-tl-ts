@@ -210,6 +210,53 @@ const SupplierCard: React.FC<SupplierCardProps> = ({ sku, supplier, isSaving, on
                     )}
                 </div>
 
+                {/* 2.5 订货配置 - MOQ 和订货单位 */}
+                <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-0.5">
+                        <Box size={12} className="text-purple-500" />
+                        <span>订货配置</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        {/* 最小起订量 */}
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">最小起订量 (MOQ)</label>
+                            {isEditing ? (
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={editInfo.minOrderQty || 1}
+                                    onChange={e => setEditInfo({ ...editInfo, minOrderQty: parseInt(e.target.value) || 1 })}
+                                    className="w-full h-9 bg-white border border-slate-200 rounded-lg px-3 text-xs font-bold text-slate-700 font-mono focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all"
+                                />
+                            ) : (
+                                <div className="h-9 bg-slate-50 border border-slate-100 rounded-lg px-3 flex items-center text-xs font-bold text-slate-700 font-mono">
+                                    {supplier?.minOrderQty || 1}
+                                </div>
+                            )}
+                        </div>
+                        {/* 订货单位量 */}
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-slate-400 uppercase ml-1">订货单位量</label>
+                            {isEditing ? (
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={editInfo.orderUnitQty || 1}
+                                    onChange={e => setEditInfo({ ...editInfo, orderUnitQty: parseInt(e.target.value) || 1 })}
+                                    className="w-full h-9 bg-white border border-slate-200 rounded-lg px-3 text-xs font-bold text-slate-700 font-mono focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 outline-none transition-all"
+                                />
+                            ) : (
+                                <div className="h-9 bg-slate-50 border border-slate-100 rounded-lg px-3 flex items-center text-xs font-bold text-slate-700 font-mono">
+                                    {supplier?.orderUnitQty || 1}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    <div className="text-[9px] text-slate-400 ml-1">
+                        补货量 = max(需求量, MOQ)，并向上取整到订货单位的倍数
+                    </div>
+                </div>
+
 
                 {/* 3. Price Tiers - Card Style */}
                 <div className="space-y-3">

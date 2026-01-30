@@ -23,7 +23,8 @@ import {
     ShoppingCart,
     PanelLeftClose,
     PanelLeftOpen,
-    BookOpen
+    BookOpen,
+    Layers
 } from 'lucide-react';
 import Logo from '../components/Logo';
 
@@ -77,9 +78,10 @@ const SidebarLayout: React.FC = () => {
                     icon: <Package className="w-4 h-4" />,
                     children: [
                         { label: '备货清单', path: '/stock', icon: <ClipboardList className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
+                        { label: '采购计划', path: '/stock/purchase-plans', icon: <Layers className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
+                        { label: '采购订单', path: '/stock/purchase-orders', icon: <ShoppingCart className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
                         { label: '入库清单', path: '/stock/entrylist', icon: <Package className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
                         { label: '出库清单', path: '/stock/outbound', icon: <Truck className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
-                        { label: '采购补货', path: '/stock/purchase-orders', icon: <ShoppingCart className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
                         { label: '操作指引', path: '/stock/help', icon: <BookOpen className="w-4 h-4" /> },
                     ]
                 },
@@ -184,7 +186,7 @@ const SidebarLayout: React.FC = () => {
                                     : 'text-slate-500 group-hover:text-slate-700'
                                 }
                             `}>
-                                {React.cloneElement(item.icon as React.ReactElement, {
+                                {React.cloneElement(item.icon as React.ReactElement<{ className?: string }>, {
                                     className: isTopLevel ? 'w-4 h-4' : 'w-3.5 h-3.5'
                                 })}
                             </div>
@@ -241,7 +243,7 @@ const SidebarLayout: React.FC = () => {
                         : 'text-slate-400 group-hover:text-slate-700 group-hover:bg-slate-100 shadow-sm'
                     }
                 `}>
-                    {React.cloneElement(item.icon as React.ReactElement, {
+                    {React.cloneElement(item.icon as React.ReactElement<{ className?: string }>, {
                         className: 'w-3.5 h-3.5'
                     })}
                 </div>

@@ -124,30 +124,7 @@ const Login: React.FC = () => {
 
                 {/* Brand Side (Visible on Desktop) */}
                 <div className="hidden lg:flex flex-col max-w-lg space-y-8 animate-in slide-in-from-left-8 duration-1000">
-                    <div className="space-y-4">
-                        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/40 border border-white/60 backdrop-blur-sm shadow-sm">
-                            <Sparkles size={14} className="text-emerald-600" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Smart Supply Chain Suite</span>
-                        </div>
-                        <h1 className="text-7xl font-black text-slate-900 leading-[1.1] tracking-tighter">
-                            殸木<br />探索精准。
-                        </h1>
-                        <p className="text-lg text-slate-500 font-medium leading-relaxed max-w-sm">
-                            极致的库存预测与备货管理工具。<br />基于算法的力量，赋能您的每一笔交易。
-                        </p>
-                    </div>
-
-                    <div className="flex items-center gap-12">
-                        <div>
-                            <p className="text-2xl font-black text-slate-900">99.2%</p>
-                            <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">预测准确率</p>
-                        </div>
-                        <div className="w-px h-8 bg-slate-200" />
-                        <div>
-                            <p className="text-2xl font-black text-slate-900">10ms</p>
-                            <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">实时解析</p>
-                        </div>
-                    </div>
+                    {/* Left side text removed as per user request */}
                 </div>
 
                 {/* Login Container */}
@@ -206,7 +183,7 @@ const Login: React.FC = () => {
                                                     value={username}
                                                     onChange={(e) => setUsername(e.target.value)}
                                                     className="w-full pl-14 pr-6 py-5 bg-white/60 border border-white rounded-[1.25rem] focus:bg-white focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900 outline-none transition-all placeholder:text-slate-400 text-slate-900 font-bold"
-                                                    placeholder="用户名 / Username"
+                                                    placeholder="用户名"
                                                     required
                                                 />
                                             </div>
@@ -219,7 +196,7 @@ const Login: React.FC = () => {
                                                     value={password}
                                                     onChange={(e) => setPassword(e.target.value)}
                                                     className="w-full pl-14 pr-6 py-5 bg-white/60 border border-white rounded-[1.25rem] focus:bg-white focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900 outline-none transition-all placeholder:text-slate-400 text-slate-900 font-bold"
-                                                    placeholder="密 码 / Password"
+                                                    placeholder="密码"
                                                     required
                                                 />
                                             </div>
@@ -235,7 +212,7 @@ const Login: React.FC = () => {
                                                     value={email}
                                                     onChange={(e) => setEmail(e.target.value)}
                                                     className="w-full pl-14 pr-32 py-5 bg-white/60 border border-white rounded-[1.25rem] focus:bg-white focus:ring-4 focus:ring-slate-900/5 focus:border-slate-900 outline-none transition-all placeholder:text-slate-400 text-slate-900 font-bold"
-                                                    placeholder="电子邮箱 / Email"
+                                                    placeholder="电子邮箱"
                                                     required
                                                 />
                                                 <button
@@ -244,7 +221,7 @@ const Login: React.FC = () => {
                                                     disabled={countdown > 0}
                                                     className="absolute right-3 top-3 bottom-3 px-4 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest disabled:bg-slate-300 disabled:cursor-not-allowed hover:bg-black transition-all shadow-lg active:scale-95"
                                                 >
-                                                    {countdown > 0 ? `${countdown}s` : 'Get Code'}
+                                                    {countdown > 0 ? `${countdown}s` : '获取验证码'}
                                                 </button>
                                             </div>
                                             <input
@@ -268,7 +245,7 @@ const Login: React.FC = () => {
                                     disabled={isLoading}
                                     className="w-full py-5 bg-slate-900 text-white rounded-[1.5rem] font-black uppercase tracking-[0.2em] shadow-[0_20px_40px_rgba(0,0,0,0.15)] hover:bg-black active:scale-[0.98] disabled:bg-slate-300 transition-all flex items-center justify-center gap-2 group/btn"
                                 >
-                                    {isLoading ? 'Processing...' : (
+                                    {isLoading ? '登录中...' : (
                                         <>
                                             验证登录
                                             <ChevronRight size={18} className="group-hover/btn:translate-x-1 transition-transform" />
@@ -278,10 +255,10 @@ const Login: React.FC = () => {
 
                                 <div className="flex justify-between items-center px-2">
                                     <Link to="/forgot-password" className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-colors">
-                                        Lost Password?
+                                        忘记密码？
                                     </Link>
                                     <Link to="/register" className="text-[10px] font-black uppercase tracking-widest text-slate-900 group flex items-center gap-1">
-                                        Join us <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+                                        注册账户 <span className="group-hover:translate-x-0.5 transition-transform">→</span>
                                     </Link>
                                 </div>
                             </form>

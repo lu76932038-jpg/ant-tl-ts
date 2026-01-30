@@ -101,6 +101,132 @@ export const verifyEmailCode = (email: string, code: string): boolean => {
         return true;
     }
 
-    console.log(`Debug: Code mismatch. Expected ${record.code}, got ${normalizedCode}`);
     return false;
+};
+
+export const sendPurchaseOrderNotification = async (recipients: string[], poData: any): Promise<void> => {
+    if (!recipients || recipients.length === 0) return;
+
+    // 变量初始化
+    let estimatedAmountStr = '待核算';
+    let supplierName = '未指定供应商';
+    let unitPriceStr = '待核算';
+    let leadTimeStr = '未知';
+    const sourceStr = poData.source === 'AUTO' ? '系统自动生成' : (poData.source === 'MANUAL' ? '人工手动创建' : '未知来源');
+
+    try {
+        const supplier = typeof poData.supplier_info === 'string' ? JSON.parse(poData.supplier_info) : poData.supplier_info;
+
+        if (supplier) {
+            supplierName = supplier.name || '未指定供应商';
+
+            // 尝试获取选中的阶梯价格，或者默认第一档
+            // 注意：SchedulerService 已经做了兜底并把 leadTime 提升到了顶层，这里再次检查确保稳健
+            const selectedTier = supplier.priceTiers?.find((t: any) => t.isSelected) || (supplier.priceTiers && supplier.priceTiers.length > 0 ? supplier.priceTiers[0] : null);
+
+            // 优先使用顶层属性 (SchedulerService 已处理)，兜底使用 Tier
+            const price = supplier.price || (selectedTier ? selectedTier.price : 0);
+            const leadTime = supplier.leadTime || (selectedTier ? (selectedTier.leadTime || selectedTier.leadTimeDays) : 0);
+
+            if (price) {
+                unitPriceStr = `¥${Number(price).toLocaleString()}`;
+                estimatedAmountStr = `¥${(poData.quantity * price).toLocaleString()}`;
+            }
+
+            if (leadTime) {
+                leadTimeStr = `${leadTime} 天`;
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to calculate details for email', e);
+    }
+
+    const mailOptions = {
+        from: `"Ant Tools Notification" <${config.email.user}>`,
+        to: recipients.join(', '),
+        subject: `[采购计划通知] ${poData.product_name} (${poData.sku}) - 待处理`,
+        text: `一份新的采购计划已生成。\n产品: ${poData.product_name}\nSKU: ${poData.sku}\n数量: ${poData.quantity}\n预估金额: ${estimatedAmountStr}\n状态说明: 待转化`,
+        html: `
+            <div style="font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #1a1a1b; padding: 40px 20px; color: #ffffff;">
+                <div style="max-width: 600px; margin: 0 auto; background-color: #262627; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3); border: 1px solid #333334;">
+                    <!-- Header Banner -->
+                    <div style="background: linear-gradient(135deg, #0061ff 0%, #60efff 100%); padding: 30px; text-align: left;">
+                        <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">采购计划通知</h1>
+                        <p style="margin: 10px 0 0 0; font-size: 14px; color: rgba(255,255,255,0.8); font-weight: 500;">采购计划 ID: PLAN-${Date.now().toString().slice(-6)}</p>
+                    </div>
+
+                    <!-- Content Body -->
+                    <div style="padding: 30px;">
+                        <p style="font-size: 15px; line-height: 1.6; color: #d1d1d1; margin-bottom: 25px;">
+                            系统已自动根据您的库存策略生成一份<b>采购计划</b>。
+                        </p>
+
+                        <div style="background-color: #1e1e1f; border-radius: 10px; padding: 20px; border: 1px solid #333334;">
+                            <table style="width: 100%; border-collapse: collapse;">
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #888; font-size: 13px; font-weight: 600; text-transform: uppercase;">产品名称</td>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #ffffff; font-size: 14px; font-weight: 700; text-align: right;">${poData.product_name}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #888; font-size: 13px; font-weight: 600; text-transform: uppercase;">SKU</td>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #3b82f6; font-size: 14px; font-weight: 800; text-align: right; font-family: monospace;">${poData.sku}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #888; font-size: 13px; font-weight: 600; text-transform: uppercase;">供应商</td>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #ffffff; font-size: 14px; font-weight: 500; text-align: right;">${supplierName}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #888; font-size: 13px; font-weight: 600; text-transform: uppercase;">计划采购数量</td>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #10b981; font-size: 18px; font-weight: 900; text-align: right;">${poData.quantity.toLocaleString()} <span style="font-size: 12px; color: #666;">PCS</span></td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #888; font-size: 13px; font-weight: 600; text-transform: uppercase;">采购单价</td>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #ffffff; font-size: 14px; font-weight: 500; text-align: right;">${unitPriceStr}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #888; font-size: 13px; font-weight: 600; text-transform: uppercase;">预估采购金额</td>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #f59e0b; font-size: 14px; font-weight: 800; text-align: right;">${estimatedAmountStr}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #888; font-size: 13px; font-weight: 600; text-transform: uppercase;">预计货期</td>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #ffffff; font-size: 14px; font-weight: 500; text-align: right;">${leadTimeStr}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #888; font-size: 13px; font-weight: 600; text-transform: uppercase;">来源</td>
+                                    <td style="padding: 12px 0; border-bottom: 1px solid #2d2d2e; color: #ffffff; font-size: 13px; font-weight: 500; text-align: right;">${sourceStr}</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 12px 0; color: #888; font-size: 13px; font-weight: 600; text-transform: uppercase;">生成日期</td>
+                                    <td style="padding: 12px 0; color: #ffffff; font-size: 13px; font-weight: 500; text-align: right;">${poData.order_date}</td>
+                                </tr>
+                            </table>
+                        </div>
+
+                        <!-- Badge -->
+                        <div style="margin-top: 20px; display: inline-block; background-color: rgba(100, 116, 139, 0.1); border: 1px solid rgba(100, 116, 139, 0.2); padding: 6px 12px; border-radius: 6px;">
+                           <span style="color: #94a3b8; font-size: 11px; font-weight: 700; text-transform: uppercase;">等待转化为正式订单</span>
+                        </div>
+
+                        <div style="margin-top: 40px; text-align: center;">
+                            <a href="http://172.16.50.100:3000/stock/purchase-plans" style="display: inline-block; background: #0061ff; color: #ffffff; padding: 16px 36px; text-decoration: none; border-radius: 8px; font-size: 15px; font-weight: 800; box-shadow: 0 4px 14px rgba(0, 97, 255, 0.4); transition: all 0.2s ease;">前往处理计划</a>
+                        </div>
+                    </div>
+
+                    <div style="background-color: #212122; padding: 25px; text-align: center; border-top: 1px solid #333334;">
+                        <p style="margin: 0; font-size: 12px; color: #666; font-weight: 500;">
+                            此邮件由 Ant Tools 自动化引擎生成的备货系统通知<br/>
+                            © 2026 Ant Tools Supply Chain. 请勿直接回复此邮件。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        `
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log(`PO Notification sent to ${recipients.length} recipients`);
+    } catch (error) {
+        console.error('Error sending PO notification:', error);
+        // Don't throw, just log. Notification failure shouldn't block PO creation.
+    }
 };

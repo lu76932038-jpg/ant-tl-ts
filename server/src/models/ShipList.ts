@@ -27,9 +27,9 @@ export class ShipListModel {
         const yyyy = date.getFullYear();
         const mm = String(date.getMonth() + 1).padStart(2, '0');
         const dd = String(date.getDate()).padStart(2, '0');
-        const timestamp = date.getTime().toString().slice(-6); // Last 6 digits of timestamp
-        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-        return `${prefix}${yyyy}${mm}${dd}${timestamp}${random}`;
+        // Format: CK-20250129-123456
+        const random = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+        return `${prefix}-${yyyy}${mm}${dd}-${random}`;
     }
 
     static async create(item: Omit<ShipList, 'id' | 'created_at' | 'outbound_id'>): Promise<number> {
@@ -71,6 +71,56 @@ export class ShipListModel {
                     `INSERT INTO shiplist (outbound_id, product_model, product_name, outbound_date, quantity, customer_name, unit_price) VALUES ${placeholders}`,
                     values
                 );
+            }
+
+            await connection.commit();
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    }
+
+    static async upsertBatch(items: Omit<ShipList, 'id' | 'created_at'>[]): Promise<void> {
+        if (items.length === 0) return;
+
+        const connection = await pool.getConnection();
+        try {
+            await connection.beginTransaction();
+
+            const BATCH_SIZE = 500;
+            for (let i = 0; i < items.length; i += BATCH_SIZE) {
+                const batch = items.slice(i, i + BATCH_SIZE);
+                const values: any[] = [];
+                const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
+
+                batch.forEach(item => {
+                    values.push(
+                        item.outbound_id,
+                        item.product_model,
+                        item.product_name,
+                        item.outbound_date,
+                        item.quantity,
+                        item.customer_name,
+                        item.unit_price || 0
+                    );
+                });
+
+                // ON DUPLICATE KEY UPDATE: Update fields if outbound_id matches
+                const sql = `
+                    INSERT INTO shiplist (outbound_id, product_model, product_name, outbound_date, quantity, customer_name, unit_price) 
+                    VALUES ${placeholders}
+                    ON DUPLICATE KEY UPDATE
+                        product_model = VALUES(product_model),
+                        product_name = VALUES(product_name),
+                        outbound_date = VALUES(outbound_date),
+                        quantity = VALUES(quantity),
+                        customer_name = VALUES(customer_name),
+                        unit_price = VALUES(unit_price)
+                `;
+
+                await connection.execute(sql, values);
             }
 
             await connection.commit();

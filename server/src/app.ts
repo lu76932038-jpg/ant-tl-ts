@@ -20,10 +20,13 @@ import strategyRoutes from './routes/strategyRoutes';
 import { EntryListModel } from './models/EntryList';
 import entryListRoutes from './routes/entryListRoutes';
 import purchaseOrderRoutes from './routes/purchaseOrderRoutes';
+import purchasePlanRoutes from './routes/purchasePlanRoutes';
 import inquiryRoutes from './routes/inquiryRoutes';
 import { InquiryTaskModel } from './models/InquiryTask';
+import { PurchasePlanModel } from './models/PurchasePlan';
 import { UserModel } from './models/User';
 import { LoginLogModel } from './models/LoginLog';
+import { SchedulerService } from './services/SchedulerService';
 import { authenticate, requireAdmin, requirePermission } from './middleware/auth';
 import { rateLimiter } from './middleware/rateLimiter';
 
@@ -79,6 +82,7 @@ app.use('/api/stocks', authenticate, standardLimiter, requirePermission('stock_l
 app.use('/api/shiplist', authenticate, standardLimiter, requirePermission('stock_list'), shipListRoutes);
 app.use('/api/products', authenticate, standardLimiter, requirePermission('stock_list'), productRoutes);
 app.use('/api/purchase-orders', authenticate, standardLimiter, requirePermission('stock_list'), purchaseOrderRoutes);
+app.use('/api/purchase-plans', authenticate, standardLimiter, requirePermission('stock_list'), purchasePlanRoutes);
 app.use('/api/strategies', authenticate, standardLimiter, requirePermission('stock_list'), strategyRoutes);
 app.use('/api/inquiry', authenticate, inquiryLimiter, requirePermission('inquiry_parsing'), inquiryRoutes);
 app.use('/api/entry-list', authenticate, standardLimiter, requirePermission('stock_list'), entryListRoutes);
@@ -93,8 +97,12 @@ const initDB = async () => {
         await StrategyModel.initializeTables(); // Initialize Strategy tables
         await ShipListModel.initializeTable(); // Initialize ShipList table
         await InquiryTaskModel.initializeTable(); // Initialize InquiryTask table
+        await PurchasePlanModel.initializeTable(); // Initialize PurchasePlan table
 
         console.log('Database initialized.');
+
+        // Initialize Scheduler -> MOVED TO server.ts to avoid double init
+        // SchedulerService.init(); 
     } catch (error) {
         console.error('Database initialization failed:', error);
     }

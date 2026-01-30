@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronDown, Calendar, Clock, BarChart3, TrendingUp, Download, ChevronUp, AlertCircle, Copy, Check } from 'lucide-react';
+import { ChevronDown, Calendar, Clock, BarChart3, TrendingUp, Download, ChevronUp, AlertCircle, Copy, Check, Snowflake, Sun, Leaf, Wind } from 'lucide-react';
 import { getISOWeek } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -388,8 +388,32 @@ const ForecastDataGrid: React.FC<ForecastDataGridProps> = ({
                 };
             });
 
+
             const monthlyTotal = days.reduce((acc, curr) => acc + curr.value, 0);
-            const source = getAggregateSource(actualMonthTotal, forecastMonthTotal); // Keep simplistic for month view or aggregation
+
+            // 基于日期判断月份 source，而不是简单比较数值
+            // 历史月份 → actual（绿色）
+            // 未来月份 → forecast（蓝色）
+            // 当前月份 → today-mix（紫色）
+            const today = new Date();
+            const currentYear = today.getFullYear();
+            const currentMonth = today.getMonth() + 1; // 1-12
+
+            let source: string;
+            if (targetYear < currentYear) {
+                source = 'actual';
+            } else if (targetYear > currentYear) {
+                source = 'forecast';
+            } else {
+                // 当前年份，按月份判断
+                if (mData.month < currentMonth) {
+                    source = 'actual';
+                } else if (mData.month > currentMonth) {
+                    source = 'forecast';
+                } else {
+                    source = 'today-mix';
+                }
+            }
 
             result.push({
                 month: mData.month,
@@ -695,14 +719,18 @@ const ForecastDataGrid: React.FC<ForecastDataGridProps> = ({
     };
 
     const renderWeeklyView = () => {
-        // Need to flatten all years or just show selected year? 
-        // Typically Weekly view is better per year.
         const dailyData = generateAllData(yearFilter);
         const weeklyMap = new Map<number, { total: number, actualSum: number, forecastSum: number }>();
 
         dailyData.forEach(m => {
             m.days.forEach(d => {
                 const wk = getISOWeek(new Date(d.date));
+                // Handle year transition edge cases if needed, but ISOWeek handles it mostly. 
+                // However, simple grouping by ISO week number might mix years if not careful.
+                // Since this view is filtered by specific 'yearFilter' (e.g. 2026), 
+                // we should be careful about days belonging to previous/next year's week.
+                // But for simplicity in this visualization, we trust getISOWeek for the current year context.
+
                 const current = weeklyMap.get(wk) || { total: 0, actualSum: 0, forecastSum: 0 };
 
                 current.total += d.value;
@@ -719,25 +747,98 @@ const ForecastDataGrid: React.FC<ForecastDataGridProps> = ({
         // Sorted weeks
         const weeks = Array.from(weeklyMap.entries()).sort((a, b) => a[0] - b[0]);
 
+        // Group by Quarter
+        const quarters = [
+            { id: 'Q1', label: '第一季度', range: [1, 13], icon: Snowflake },
+            { id: 'Q2', label: '第二季度', range: [14, 26], icon: Sun },
+            { id: 'Q3', label: '第三季度', range: [27, 39], icon: Leaf },
+            { id: 'Q4', label: '第四季度', range: [40, 53], icon: Wind },
+        ];
+
         return (
-            <div className="space-y-4">
-                <div className="flex items-center gap-2 mb-4">
-                    <span className="text-xs font-bold text-gray-500">选择年份:</span>
-                    <select
-                        value={yearFilter}
-                        onChange={e => setYearFilter(Number(e.target.value))}
-                        className="bg-gray-50 border border-gray-200 rounded px-2 py-1 text-xs font-bold outline-none"
-                    >
-                        {availableYears.map(y => <option key={y} value={y}>{y}年</option>)}
-                    </select>
+            <div className="space-y-8 animate-in fade-in duration-500">
+                {/* Year Filter Header */}
+                <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-100 shadow-sm sticky top-0 z-20">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-blue-50 p-2 rounded-lg text-blue-600">
+                            <Clock size={18} />
+                        </div>
+                        <div>
+                            <span className="text-xs text-gray-400 font-medium block">当前视角</span>
+                            <span className="text-sm font-bold text-gray-900">周度明细 (Quarterly)</span>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-gray-500">选择年份:</span>
+                        <select
+                            value={yearFilter}
+                            onChange={e => setYearFilter(Number(e.target.value))}
+                            className="bg-gray-50 hover:bg-gray-100 border-none rounded-lg px-3 py-1.5 text-sm font-bold text-blue-700 outline-none cursor-pointer transition-colors"
+                        >
+                            {availableYears.map(y => <option key={y} value={y}>{y}年</option>)}
+                        </select>
+                    </div>
                 </div>
-                <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 gap-3">
-                    {weeks.map(([weekNum, data]) => {
-                        const dominantSource = getAggregateSource(data.actualSum, data.forecastSum);
+
+                <div className="space-y-8 pb-8">
+                    {quarters.map((quarter) => {
+                        const quarterWeeks = weeks.filter(([w]) => w >= quarter.range[0] && w <= quarter.range[1]);
+                        if (quarterWeeks.length === 0) return null;
+
                         return (
-                            <div key={weekNum} className={`rounded-lg p-3 text-center border transition-colors ${dominantSource === 'actual' ? 'bg-emerald-50 border-emerald-100' : 'bg-blue-50 border-blue-100'}`}>
-                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">周 {weekNum}</div>
-                                <div className={`text-sm mt-1 font-mono ${getSourceStyle(dominantSource)}`}>{formatNumber(data.total)}</div>
+                            <div key={quarter.id} className="relative">
+                                {/* Quarter Label */}
+                                <div className="flex items-center gap-2 mb-4 ml-1">
+                                    <span className="text-sm font-black text-gray-300 select-none">{quarter.label}</span>
+                                    <div className="h-px bg-gray-100 flex-1"></div>
+                                </div>
+
+                                {/* Grid */}
+                                <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-13 gap-3">
+                                    {quarterWeeks.map(([weekNum, data]) => {
+                                        const dominantSource = getAggregateSource(data.actualSum, data.forecastSum);
+                                        const isActual = dominantSource === 'actual';
+
+                                        return (
+                                            <div
+                                                key={weekNum}
+                                                className={`
+                                                    group relative flex flex-col justify-between
+                                                    rounded-xl border p-3 hover:shadow-md transition-all duration-200 hover:-translate-y-1
+                                                    ${isActual
+                                                        ? 'bg-emerald-50/30 border-emerald-100 hover:border-emerald-300'
+                                                        : 'bg-white border-gray-100 hover:border-blue-300'
+                                                    }
+                                                `}
+                                            >
+                                                {/* Header */}
+                                                <div className="flex items-center justify-center relative mb-2">
+                                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${isActual ? 'text-emerald-400' : 'text-gray-400'}`}>
+                                                        周 {weekNum}
+                                                    </span>
+                                                    {isActual && (
+                                                        <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
+                                                    )}
+                                                </div>
+
+                                                {/* Value */}
+                                                <div className={`text-base font-mono font-bold text-center tracking-tight ${getSourceStyle(dominantSource)}`}>
+                                                    {formatNumber(data.total)}
+                                                </div>
+
+                                                {/* Decor */}
+                                                <div className={`
+                                                    absolute bottom-0 left-0 w-full h-0.5 rounded-b-xl
+                                                    ${isActual ? 'bg-emerald-400/20' : 'bg-blue-400/20'}
+                                                    opacity-0 group-hover:opacity-100 transition-opacity
+                                                `} />
+                                            </div>
+                                        );
+                                    })}
+
+                                    {/* Fillers for empty slots if needed to maintain alignment, or just leave as is */}
+                                </div>
                             </div>
                         );
                     })}
@@ -748,6 +849,10 @@ const ForecastDataGrid: React.FC<ForecastDataGridProps> = ({
 
     const renderYearlyView = () => {
         // Show all years
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth() + 1; // 1-12
+
         const data = availableYears.map(year => {
             const yearData = generateAllData(year);
             let total = 0;
@@ -756,14 +861,45 @@ const ForecastDataGrid: React.FC<ForecastDataGridProps> = ({
 
             yearData.forEach(m => {
                 total += m.monthlyTotal;
-                if (m.source === 'actual') {
+
+                // 基于日期判断 source，而不是简单比较数值
+                // 历史月份 → actual（绿色）
+                // 未来月份 → forecast（蓝色）
+                // 当前月份 → 混合（紫色）
+                let monthSource: string;
+                if (year < currentYear) {
+                    monthSource = 'actual';
+                } else if (year > currentYear) {
+                    monthSource = 'forecast';
+                } else {
+                    // 当前年份，按月份判断
+                    if (m.month < currentMonth) {
+                        monthSource = 'actual';
+                    } else if (m.month > currentMonth) {
+                        monthSource = 'forecast';
+                    } else {
+                        monthSource = 'today-mix';
+                    }
+                }
+
+                if (monthSource === 'actual') {
                     actualSum += m.monthlyTotal;
                 } else {
                     forecastSum += m.monthlyTotal;
                 }
             });
 
-            return { year, total, source: getAggregateSource(actualSum, forecastSum) };
+            // 年度 source 判断：完全是历史年 → actual，完全是未来年 → forecast，混合年 → today-mix
+            let yearSource: string;
+            if (year < currentYear) {
+                yearSource = 'actual';
+            } else if (year > currentYear) {
+                yearSource = 'forecast';
+            } else {
+                yearSource = 'today-mix'; // 当前年份包含历史和未来
+            }
+
+            return { year, total, source: yearSource };
         });
 
         return (

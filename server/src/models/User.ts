@@ -241,5 +241,13 @@ export class UserModel {
             console.error('Error initializing users table:', error);
         }
     }
+    static async findStockNotificationRecipients(): Promise<string[]> {
+        const users = await this.findAll(); // Reuse findAll which handles JSON parsing
+        const recipients = users
+            .filter(u => u.role === 'admin' || (u.permissions && u.permissions.includes('stock_list')))
+            .map(u => u.email)
+            .filter(email => !!email); // Ensure no nulls
+        return [...new Set(recipients)]; // De-duplicate
+    }
 }
 

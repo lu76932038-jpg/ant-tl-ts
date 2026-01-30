@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { ShipListModel } from '../models/ShipList';
+import { StockModel, StockStatus } from '../models/Stock';
 
 export const getShipList = async (req: Request, res: Response) => {
     try {
@@ -78,5 +79,99 @@ export const generateMockData = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Error generating mock data:', error);
         res.status(500).json({ error: 'Failed to generate mock data' });
+    }
+};
+
+export const importShipData = async (req: Request, res: Response) => {
+    try {
+        const items = req.body; // Expect JSON array
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ error: 'Invalid data format. Expected non-empty array.' });
+        }
+
+        const validItems: any[] = [];
+        const createdSkus = new Set<string>();
+        let newSkuCount = 0;
+
+        // 1. Pre-process and validate
+        // Since we might have many rows, we process them sequentially or in chunks.
+        // For simplicity and safety (checking DB check), we do it sequentially for SKU checks.
+        // Optimization: Fetch ALL existing SKUs first to avoid N queries.
+
+        // Optimization: Fetch ALL existing SKUs first to avoid N queries.
+        const allStock = await StockModel.findAll();
+        const existingSkus = new Set(allStock.map(s => s.sku));
+
+        for (const item of items) {
+            // Basic Validation
+            if (!item.product_model || !item.product_name || !item.outbound_date || !item.quantity || !item.customer_name) {
+                continue; // Skip invalid rows or we could throw error
+            }
+
+            const sku = item.product_model;
+
+            // 2. Auto-create Product if missing
+            if (!existingSkus.has(sku) && !createdSkus.has(sku)) {
+                console.log(`Auto-creating new product from import: ${sku}`);
+                console.log(`Auto-creating new product from import: ${sku}`);
+                await StockModel.create({
+                    sku: sku,
+                    name: item.product_name, // Use the name from import
+                    status: StockStatus.HEALTHY, // Default Healthy
+                    inStock: 0,
+                    available: 0,
+                    inTransit: 0,
+                    unit: '个'
+                });
+                createdSkus.add(sku);
+                newSkuCount++;
+            }
+
+            // 3. Prepare Ship Record
+            // If outbound_id is provided, check uniqueness? 
+            // For now, let's assume if it's provided we use it, if not we generate it. 
+            // ShipListModel.createBatch doesn't auto-generate if we pass it, 
+            // BUT createBatch logic in Model (as checked previously) assumes we pass everything.
+            // Let's look at ShipListModel.createBatch again. 
+            // It expects `outbound_id` in the item.
+
+            let oid = item.outbound_id;
+            if (!oid) {
+                // We need to generate one. 
+                // Since model method is private or static, we might need access or replicate logic.
+                // Or better, let's update createBatch in Model to handle missing IDs? 
+                // For now, replicate logic here to keep Model simple batch insert.
+                const prefix = 'CK';
+                const d = new Date(); // Use current time for import operation part
+                // Using random to avoid collision in same batch milliseconds
+                const random = Math.floor(Math.random() * 1000000000).toString().padStart(9, '0');
+                // Simple unique ID for batch
+                oid = `${prefix}-${Date.now()}-${random}-${validItems.length}`;
+            }
+
+            validItems.push({
+                outbound_id: oid,
+                product_model: sku,
+                product_name: item.product_name,
+                outbound_date: item.outbound_date,
+                quantity: Number(item.quantity),
+                customer_name: item.customer_name,
+                unit_price: item.unit_price ? Number(item.unit_price) : 0
+            });
+        }
+
+        if (validItems.length > 0) {
+            await ShipListModel.upsertBatch(validItems);
+        }
+
+        res.json({
+            success: true,
+            totalImported: validItems.length,
+            newSkusCreated: newSkuCount
+        });
+
+    } catch (error) {
+        console.error('Error importing ship data:', error);
+        res.status(500).json({ error: 'Failed to import data' });
     }
 };

@@ -43,7 +43,9 @@ export interface ChartData {
 }
 
 export interface StrategyConfig {
-    safety_stock_days: number;
+    safety_stock_days: number; // 这将映射为“备货覆盖时长”
+    buffer_days: number;       // 新增：安全库存天数(缓冲)
+    replenishment_sales_cycle: number; // 新增：补货销售周期 (月)
     rop: number;
     eoq: number;
     start_year_month?: string;
@@ -63,6 +65,13 @@ export interface StrategyConfig {
     // 补货设置相关字段 (V3.0.1 任务11)
     auto_replenishment?: boolean; // 是否自动补货
     auto_replenishment_time?: string; // 自动补货时间 (HH:mm 格式)
+
+    // V3.0.1 任务55 & 57
+    dead_stock_days?: number; // 呆滞判定天数
+    is_stocking_enabled?: boolean; // 是否开启备货
+
+    // V3.0.1 任务48: 数据权限白名单 (User IDs)
+    authorized_viewer_ids?: number[];
 }
 
 export interface PriceTier {
@@ -83,6 +92,9 @@ export interface SupplierInfo {
     leadTimeEconomic?: number; // 经济模式交期(天)
     // V3.0.1 任务17: 阶梯价格
     priceTiers?: PriceTier[];
+    // V3.0.1: 订货配置
+    minOrderQty?: number;  // 最小起订量 (MOQ)
+    orderUnitQty?: number; // 订货单位量
 }
 
 export interface AuditLog {

@@ -30,13 +30,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
             else if (label > currentYear) timeContext = 'future';
         }
 
-        // Filter Payload based on Context
-        const filteredPayload = payload.filter((p: any) => {
-            const name = p.name;
-            if (timeContext === 'past') return name.includes('实际');
-            if (timeContext === 'future') return name.includes('预测');
-            return true; // Current: Show Both
-        });
+        // Show all payload items regardless of time context to allow comparison
+        const filteredPayload = payload;
 
         if (filteredPayload.length === 0) return null;
 
@@ -47,7 +42,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                     {filteredPayload.map((p: any) => (
                         <div key={p.name} className="flex items-center gap-4 justify-between">
                             <div className="flex items-center gap-2.5">
-                                <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: p.color || p.fill }} />
+                                <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: p.color || p.fill || p.stroke }} />
                                 <span className="text-xs font-bold text-gray-500">{p.name}</span>
                             </div>
                             <span className="font-mono text-xs font-black text-gray-900">
@@ -79,6 +74,17 @@ const SalesForecastChart: React.FC<SalesForecastChartProps> = ({
         customers: true
     });
 
+    const [hoveredSeries, setHoveredSeries] = useState<string | null>(null);
+
+    // Helper to determine opacity
+    const getOpacity = (name: string) => {
+        if (!hoveredSeries) return 1;
+        return hoveredSeries === name ? 1 : 0.2;
+    };
+
+    // ... (rest of component, updating Legend below)
+
+
     // Add mount check with delay to ensure flex container has size
     const [isMounted, setIsMounted] = useState(false);
     useEffect(() => {
@@ -87,6 +93,40 @@ const SalesForecastChart: React.FC<SalesForecastChartProps> = ({
         }, 150);
         return () => clearTimeout(timer);
     }, []);
+
+    // 预处理数据：未来日期的实际数据应清空，只保留预测数据
+    const processedData = React.useMemo(() => {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1; // 1-12
+        const currentYearMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+
+        return displayData.map(item => {
+            const label = item.month; // YYYY-MM 或 YYYY 格式
+            let isFuture = false;
+
+            if (label.length === 7) {
+                // 月度格式: YYYY-MM
+                isFuture = label > currentYearMonth;
+            } else if (label.length === 4) {
+                // 年度格式: YYYY
+                isFuture = parseInt(label, 10) > currentYear;
+            }
+
+            if (isFuture) {
+                // 清空未来日期的实际数据
+                return {
+                    ...item,
+                    actualQty: undefined,
+                    actualAmount: undefined,
+                    actualCustomerCount: undefined
+                };
+            }
+
+            return item;
+        });
+    }, [displayData]);
+
 
     return (
         <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/20 ring-1 ring-gray-100/50 p-8 flex flex-col h-[650px] transition-all duration-500 hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
@@ -118,7 +158,7 @@ const SalesForecastChart: React.FC<SalesForecastChartProps> = ({
 
                         <div className="w-px h-4 bg-gray-200"></div>
 
-                        {/* Download Action */}
+                        {/* Download Action - 暂时隐藏
                         <button
                             onClick={onExport}
                             className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all active:scale-95"
@@ -129,57 +169,18 @@ const SalesForecastChart: React.FC<SalesForecastChartProps> = ({
                                 <span className="text-xs font-bold">导出Excel</span>
                             </div>
                         </button>
+                        */}
                     </div>
                 </div>
 
-                {/* Data Series Toggles - Refined Design */}
-                <div className="flex items-center gap-6">
-                    <div
-                        onClick={() => setVisibleSeries({ ...visibleSeries, qty: !visibleSeries.qty })}
-                        className={`group flex items-center gap-3 cursor-pointer py-2 px-3 rounded-2xl transition-all duration-300 border-2 ${visibleSeries.qty ? 'bg-black border-black shadow-lg shadow-gray-200' : 'bg-white border-gray-100 hover:border-gray-200'}`}
-                    >
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${visibleSeries.qty ? 'bg-white/10 text-white' : 'bg-gray-50 text-gray-400'}`}>
-                            <Package size={18} />
-                        </div>
-                        <div className="flex flex-col pr-2">
-                            <span className={`text-[9px] font-black uppercase tracking-widest ${visibleSeries.qty ? 'text-blue-400' : 'text-gray-400'}`}>QUANTITY</span>
-                            <span className={`text-xs font-black ${visibleSeries.qty ? 'text-white' : 'text-gray-900'}`}>出库数量</span>
-                        </div>
-                    </div>
-
-                    <div
-                        onClick={() => setVisibleSeries({ ...visibleSeries, amount: !visibleSeries.amount })}
-                        className={`group flex items-center gap-3 cursor-pointer py-2 px-3 rounded-2xl transition-all duration-300 border-2 ${visibleSeries.amount ? 'bg-emerald-600 border-emerald-600 shadow-lg shadow-emerald-100' : 'bg-white border-gray-100 hover:border-gray-200'}`}
-                    >
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${visibleSeries.amount ? 'bg-white/10 text-white' : 'bg-gray-50 text-gray-400'}`}>
-                            <ShoppingCart size={18} />
-                        </div>
-                        <div className="flex flex-col pr-2">
-                            <span className={`text-[9px] font-black uppercase tracking-widest ${visibleSeries.amount ? 'text-emerald-200' : 'text-gray-400'}`}>REVENUE</span>
-                            <span className={`text-xs font-black ${visibleSeries.amount ? 'text-white' : 'text-gray-900'}`}>销售金额</span>
-                        </div>
-                    </div>
-
-                    <div
-                        onClick={() => setVisibleSeries({ ...visibleSeries, customers: !visibleSeries.customers })}
-                        className={`group flex items-center gap-3 cursor-pointer py-2 px-3 rounded-2xl transition-all duration-300 border-2 ${visibleSeries.customers ? 'bg-orange-500 border-orange-500 shadow-lg shadow-orange-100' : 'bg-white border-gray-100 hover:border-gray-200'}`}
-                    >
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${visibleSeries.customers ? 'bg-white/10 text-white' : 'bg-gray-50 text-gray-400'}`}>
-                            <TruckIcon size={18} />
-                        </div>
-                        <div className="flex flex-col pr-2">
-                            <span className={`text-[9px] font-black uppercase tracking-widest ${visibleSeries.customers ? 'text-orange-100' : 'text-gray-400'}`}>CUSTOMERS</span>
-                            <span className={`text-xs font-black ${visibleSeries.customers ? 'text-white' : 'text-gray-900'}`}>客户统计</span>
-                        </div>
-                    </div>
-                </div>
+                {/* Data Series Toggles REMOVED per Task 50 request */}
             </div>
 
             <div className="flex-1 w-full min-h-0 relative">
                 {isMounted && (
                     <div className="absolute inset-0">
                         <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart data={displayData} margin={{ top: 30, right: 20, left: 15, bottom: 0 }}>
+                            <ComposedChart data={processedData} margin={{ top: 40, right: 20, left: 40, bottom: 0 }}>
                                 <defs>
                                     {/* Actual Quantity Gradient */}
                                     <linearGradient id="qtyGradient" x1="0" y1="0" x2="0" y2="1">
@@ -248,11 +249,36 @@ const SalesForecastChart: React.FC<SalesForecastChartProps> = ({
                                 <YAxis yAxisId="customers" orientation="left" hide domain={['auto', 'auto']} />
 
                                 <Tooltip
-                                    content={<CustomTooltip />}
                                     cursor={{ fill: '#F8FAFC', opacity: 0.8 }}
+                                    content={<CustomTooltip />}
                                 />
 
-                                <Legend content={() => null} />
+                                <Legend
+                                    verticalAlign="top"
+                                    align="right"
+                                    height={36}
+                                    iconType="circle"
+                                    wrapperStyle={{
+                                        fontSize: '12px',
+                                        fontWeight: 'bold',
+                                        paddingBottom: '10px',
+                                        cursor: 'pointer'
+                                    }}
+                                    onClick={(e) => {
+                                        const { dataKey } = e as any;
+                                        // Mapping dataKey to series key
+                                        let key: keyof typeof visibleSeries | null = null;
+                                        if (dataKey === 'actualQty' || dataKey === 'forecastRemainder') key = 'qty';
+                                        if (dataKey === 'actualAmount' || dataKey === 'forecastAmount') key = 'amount';
+                                        if (dataKey === 'actualCustomerCount' || dataKey === 'forecastCustomerCount') key = 'customers';
+
+                                        if (key) {
+                                            setVisibleSeries(prev => ({ ...prev, [key!]: !prev[key!] }));
+                                        }
+                                    }}
+                                    onMouseEnter={(e) => setHoveredSeries(e.value)}
+                                    onMouseLeave={() => setHoveredSeries(null)}
+                                />
 
                                 {/* Brush for Zooming - Styled */}
                                 {viewDimension === 'month' && (
@@ -268,93 +294,89 @@ const SalesForecastChart: React.FC<SalesForecastChartProps> = ({
                                 )}
 
                                 {/* Series: Qty (Stacked Bar) */}
-                                {visibleSeries.qty && (
-                                    <>
-                                        {/* Actual Qty - Base */}
-                                        <Bar
-                                            stackId="qty"
-                                            yAxisId="left"
-                                            dataKey="actualQty"
-                                            name="实际出库数量"
-                                            fill="url(#qtyGradient)"
-                                            barSize={28}
-                                            radius={[4, 4, 4, 4]} // Rounded all around if mostly alone
-                                            animationDuration={1500}
-                                        />
-                                        {/* Forecast Remainder - Top Stack */}
-                                        <Bar
-                                            stackId="qty"
-                                            yAxisId="left"
-                                            dataKey="forecastRemainder"
-                                            name="预测出库数量"
-                                            fill="url(#forecastPattern)"
-                                            barSize={28}
-                                            radius={[4, 4, 0, 0]}
-                                            animationDuration={1500}
-                                        />
-                                    </>
-                                )}
+                                <Bar
+                                    stackId="qty"
+                                    yAxisId="left"
+                                    dataKey="actualQty"
+                                    name="实际销售数量"
+                                    fill="url(#qtyGradient)"
+                                    barSize={28}
+                                    radius={[4, 4, 4, 4]}
+                                    animationDuration={1500}
+                                    hide={!visibleSeries.qty}
+                                    opacity={getOpacity('实际销售数量')}
+                                />
+                                <Bar
+                                    stackId="qty"
+                                    yAxisId="left"
+                                    dataKey="forecastRemainder"
+                                    name="预测销售数量"
+                                    fill="url(#forecastPattern)"
+                                    barSize={28}
+                                    radius={[4, 4, 0, 0]}
+                                    animationDuration={1500}
+                                    hide={!visibleSeries.qty}
+                                    opacity={getOpacity('预测销售数量')}
+                                />
 
                                 {/* Series: Amount (Line) */}
-                                {visibleSeries.amount && (
-                                    <>
-                                        <Line
-                                            yAxisId="right"
-                                            type="monotone"
-                                            dataKey="actualAmount"
-                                            name="实际销售金额"
-                                            stroke="#10B981"
-                                            strokeWidth={3}
-                                            dot={false}
-                                            activeDot={{ r: 6, strokeWidth: 0, fill: '#10B981' }}
-                                            filter="url(#shadowAmount)"
-                                        />
-                                        <Line
-                                            yAxisId="right"
-                                            type="monotone"
-                                            dataKey="forecastAmount"
-                                            name="预测销售金额"
-                                            stroke="#10B981"
-                                            strokeDasharray="4 4"
-                                            strokeWidth={2}
-                                            dot={false}
-                                            activeDot={{ r: 4, fill: '#fff', stroke: '#10B981', strokeWidth: 2 }}
-                                            opacity={0.6}
-                                        />
-                                    </>
-                                )}
+                                <Line
+                                    yAxisId="right"
+                                    type="monotone"
+                                    dataKey="actualAmount"
+                                    name="实际销售金额"
+                                    stroke="#10B981"
+                                    strokeWidth={3}
+                                    dot={false}
+                                    activeDot={{ r: 6, strokeWidth: 0, fill: '#10B981' }}
+                                    filter="url(#shadowAmount)"
+                                    hide={!visibleSeries.amount}
+                                    strokeOpacity={getOpacity('实际销售金额')}
+                                />
+                                <Line
+                                    yAxisId="right"
+                                    type="monotone"
+                                    dataKey="forecastAmount"
+                                    name="预测销售金额"
+                                    stroke="#10B981"
+                                    strokeDasharray="4 4"
+                                    strokeWidth={2}
+                                    dot={false}
+                                    activeDot={{ r: 4, fill: '#fff', stroke: '#10B981', strokeWidth: 2 }}
+                                    hide={!visibleSeries.amount}
+                                    strokeOpacity={0.6 * getOpacity('预测销售金额')}
+                                />
 
                                 {/* Series: Customers (Line/Scatter) */}
-                                {visibleSeries.customers && (
-                                    <>
-                                        <Line
-                                            yAxisId="customers"
-                                            type="monotone"
-                                            dataKey="actualCustomerCount"
-                                            name="实际客户数量"
-                                            stroke="#F97316"
-                                            strokeWidth={2}
-                                            dot={(props: any) => {
-                                                const { cx, cy, payload } = props;
-                                                if (!payload.actualCustomerCount || payload.actualCustomerCount === 0) return null;
-                                                return (
-                                                    <circle cx={cx} cy={cy} r={4} fill="#fff" stroke="#F97316" strokeWidth={2} />
-                                                );
-                                            }}
-                                        />
-                                        <Line
-                                            yAxisId="customers"
-                                            type="monotone"
-                                            dataKey="forecastCustomerCount"
-                                            name="预测客户数量"
-                                            stroke="#F97316"
-                                            strokeDasharray="3 3"
-                                            strokeWidth={1.5}
-                                            dot={false}
-                                            opacity={0.7}
-                                        />
-                                    </>
-                                )}
+                                <Line
+                                    yAxisId="customers"
+                                    type="monotone"
+                                    dataKey="actualCustomerCount"
+                                    name="实际客户数量"
+                                    stroke="#F97316"
+                                    strokeWidth={2}
+                                    dot={(props: any) => {
+                                        const { cx, cy, payload } = props;
+                                        if (!payload.actualCustomerCount || payload.actualCustomerCount === 0) return null;
+                                        return (
+                                            <circle cx={cx} cy={cy} r={4} fill="#fff" stroke="#F97316" strokeWidth={2} opacity={getOpacity('实际客户数量')} />
+                                        );
+                                    }}
+                                    hide={!visibleSeries.customers}
+                                    strokeOpacity={getOpacity('实际客户数量')}
+                                />
+                                <Line
+                                    yAxisId="customers"
+                                    type="monotone"
+                                    dataKey="forecastCustomerCount"
+                                    name="预测客户数量"
+                                    stroke="#F97316"
+                                    strokeDasharray="3 3"
+                                    strokeWidth={1.5}
+                                    dot={false}
+                                    hide={!visibleSeries.customers}
+                                    strokeOpacity={0.7 * getOpacity('预测客户数量')}
+                                />
 
                                 {/* Reference Line for 'Now' */}
                                 {nowLabel && (
