@@ -20,11 +20,15 @@ import EntryList from './pages/stock/EntryList';
 import PurchaseOrderList from './pages/stock/PurchaseOrderList';
 import PurchasePlanList from './pages/stock/PurchasePlanList';
 import ProductDetail from './pages/stock/ProductDetail';
+import StockDefaults from './pages/stock/StockDefaults';
+import Community from './pages/community/Community';
+import CommunityDetail from './pages/community/CommunityDetail';
 import StockCommandCenter from './pages/stock/StockCommandCenter';
 import DashboardHome from './pages/DashboardHome';
 import InquiryList from './pages/inquiry/InquiryList';
 import InquiryDetail from './pages/inquiry/InquiryDetail';
 import StockHelpCenter from './pages/stock/StockHelpCenter';
+import FeedbackPage from './pages/feedback/FeedbackPage';
 
 const App: React.FC = () => {
     return (
@@ -53,14 +57,17 @@ const App: React.FC = () => {
                         <Route path="change-password" element={<ChangePassword />} />
                         <Route path="help" element={<HelpDocs />} />
                         <Route path="at-orders" element={<AtOrders />} />
+                        <Route path="community" element={<Community />} />
+                        <Route path="community/:id" element={<CommunityDetail />} />
 
-                        {/* 备货小助手 (需要 stock_list 权限) */}
+                        {/* 备货助手 (需要 stock_list 权限) */}
                         <Route element={
                             <ProtectedRoute requiredPermission="stock_list">
                                 <Outlet />
                             </ProtectedRoute>
                         }>
                             <Route path="stock" element={<StockList />} />
+                            <Route path="stock/defaults" element={<StockDefaults />} />
                             <Route path="stock/shiplist" element={<StockList />} />
                             <Route path="stock/outbound" element={<ShipList />} />
                             <Route path="stock/entrylist" element={<EntryList />} />
@@ -69,6 +76,8 @@ const App: React.FC = () => {
                             <Route path="stock/product/:sku" element={<ProductDetail />} />
                             <Route path="stock/help" element={<StockHelpCenter />} />
                         </Route>
+
+                        <Route path="feedback" element={<FeedbackPage />} />
 
                         <Route
                             path="train-invoice"

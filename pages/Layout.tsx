@@ -24,7 +24,8 @@ import {
     PanelLeftClose,
     PanelLeftOpen,
     BookOpen,
-    Layers
+    Layers,
+    MessageSquarePlus
 } from 'lucide-react';
 import Logo from '../components/Logo';
 
@@ -36,7 +37,7 @@ const SidebarLayout: React.FC = () => {
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
     // State for expanded menus (handling multiple levels)
-    const [expandedMenus, setExpandedMenus] = useState<string[]>(['殸木小工具', '备货小助手', '个人中心', '系统管理']);
+    const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
 
     const toggleMenu = (label: string) => {
         setExpandedMenus(prev =>
@@ -61,6 +62,12 @@ const SidebarLayout: React.FC = () => {
 
     const menuConfig: MenuItem[] = [
         {
+            label: '殸木社区',
+            path: '/community',
+            icon: <Users className="w-5 h-5 text-violet-600" />,
+            roles: ['user', 'admin']
+        },
+        {
             label: '殸木小工具',
             icon: <Wrench className="w-5 h-5 text-gray-600" />,
             children: [
@@ -68,13 +75,13 @@ const SidebarLayout: React.FC = () => {
                     label: '询价管理',
                     icon: <LayoutGrid className="w-4 h-4" />,
                     children: [
-                        { label: '询价解析列表', path: '/', icon: <ClipboardList className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'inquiry_parsing' },
+                        { label: '询价解析列表', path: '/inquiry-history', icon: <ClipboardList className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'inquiry_parsing' },
                         { label: '操作指引', path: '/help', icon: <BookOpen className="w-4 h-4" /> }
                     ]
                 },
                 { label: 'A&T 订单', path: '/at-orders', icon: <FileSpreadsheet className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'at_orders' },
                 {
-                    label: '备货小助手',
+                    label: '备货助手',
                     icon: <Package className="w-4 h-4" />,
                     children: [
                         { label: '备货清单', path: '/stock', icon: <ClipboardList className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
@@ -82,6 +89,7 @@ const SidebarLayout: React.FC = () => {
                         { label: '采购订单', path: '/stock/purchase-orders', icon: <ShoppingCart className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
                         { label: '入库清单', path: '/stock/entrylist', icon: <Package className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
                         { label: '出库清单', path: '/stock/outbound', icon: <Truck className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
+                        { label: '使用建议', path: '/feedback', icon: <MessageSquarePlus className="w-4 h-4" />, roles: ['user', 'admin'] },
                         { label: '操作指引', path: '/stock/help', icon: <BookOpen className="w-4 h-4" /> },
                     ]
                 },
@@ -297,55 +305,41 @@ const SidebarLayout: React.FC = () => {
                                 <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-[#2c2c2c] rounded-full" />
                             </div>
 
-                            {/* 用户信息 (仅展开时显示) */}
-                            <div className={`flex-1 min-w-0 transition-opacity duration-300 ${isSidebarCollapsed ? 'w-0 opacity-0 hidden' : 'opacity-100'}`}>
-                                <p className="text-sm font-bold text-white truncate leading-tight">{user?.username || '用户'}</p>
-                                <div className="flex items-center gap-1.5 mt-1">
-                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-white/20 text-white/90 uppercase tracking-wider">
-                                        {user?.role}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* 操作按钮组 */}
-                            <div className={`flex items-center transition-all duration-300 ${isSidebarCollapsed ? 'flex-col order-1 gap-2 mb-1' : 'gap-1'}`}>
-                                {/* 注销按钮 */}
-                                {/* 注销按钮 */}
-                                <button
-                                    onClick={handleLogout}
-                                    type="button"
-                                    className={`
+                            {/* 注销按钮 */}
+                            <button
+                                onClick={handleLogout}
+                                type="button"
+                                className={`
                                         relative z-50 cursor-pointer
                                         flex items-center justify-center rounded-lg transition-all
                                         hover:bg-red-500/20 hover:text-red-400
                                         ${isSidebarCollapsed
-                                            ? 'w-8 h-8 text-slate-500'
-                                            : 'w-8 h-8 text-slate-400'
-                                        }
+                                        ? 'w-8 h-8 text-slate-500'
+                                        : 'w-8 h-8 text-slate-400'
+                                    }
                                     `}
-                                    title="退出登录"
-                                >
-                                    <LogOut className="w-4 h-4" />
-                                </button>
+                                title="退出登录"
+                            >
+                                <LogOut className="w-4 h-4" />
+                            </button>
 
-                                {/* 收缩/展开按钮 */}
-                                <button
-                                    onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                                    type="button"
-                                    className={`
+                            {/* 收缩/展开按钮 */}
+                            <button
+                                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                                type="button"
+                                className={`
                                         relative z-50 cursor-pointer
                                         flex items-center justify-center rounded-lg transition-all
                                         hover:bg-white/20 hover:text-white
                                         ${isSidebarCollapsed
-                                            ? 'w-8 h-8 text-slate-500 bg-slate-200/50 rotate-180'
-                                            : 'w-8 h-8 text-slate-400'
-                                        }
+                                        ? 'w-8 h-8 text-slate-500 bg-slate-200/50 rotate-180'
+                                        : 'w-8 h-8 text-slate-400'
+                                    }
                                     `}
-                                    title={isSidebarCollapsed ? "展开菜单" : "收起菜单"}
-                                >
-                                    <PanelLeftClose className="w-4 h-4" />
-                                </button>
-                            </div>
+                                title={isSidebarCollapsed ? "展开菜单" : "收起菜单"}
+                            >
+                                <PanelLeftClose className="w-4 h-4" />
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -353,7 +347,7 @@ const SidebarLayout: React.FC = () => {
 
             {/* Main Container */}
             <main className="flex-1 flex flex-col min-w-0 bg-[#f7f5f2] relative overflow-hidden">
-                <div className="flex-1 relative flex flex-col min-h-0">
+                <div className="flex-1 relative flex flex-col min-h-0 overflow-y-auto custom-scrollbar">
                     <Outlet />
                 </div>
             </main>

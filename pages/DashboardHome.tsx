@@ -38,7 +38,7 @@ const DashboardHome: React.FC = () => {
     ];
 
     const quickActions = [
-        { title: '即时询价解析', desc: '上传PDF/Excel自动解析', icon: <Zap size={24} />, path: '/' },
+        { title: '即时询价解析', desc: '上传PDF/Excel自动解析', icon: <Zap size={24} />, path: '/inquiry-history' },
         { title: '智能备货建议', desc: '基于预测算法的补货提醒', icon: <TrendingUp size={24} />, path: '/stock' },
         { title: '采购草稿管理', desc: '快速合并多SKU采购单', icon: <LayoutGrid size={24} />, path: '/stock/purchase-orders' },
     ];
@@ -113,7 +113,7 @@ const DashboardHome: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="h-[280px] w-full">
+                        <div className="h-[280px] w-full min-w-0">
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={trendData}>
                                     <defs>

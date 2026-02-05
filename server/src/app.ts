@@ -87,6 +87,14 @@ app.use('/api/strategies', authenticate, standardLimiter, requirePermission('sto
 app.use('/api/inquiry', authenticate, inquiryLimiter, requirePermission('inquiry_parsing'), inquiryRoutes);
 app.use('/api/entry-list', authenticate, standardLimiter, requirePermission('stock_list'), entryListRoutes);
 
+// Community Routes - Authenticated
+import communityRoutes from './routes/communityRoutes';
+app.use('/api/community', authenticate, standardLimiter, communityRoutes);
+
+// Upload Routes
+import uploadRoutes from './routes/uploadRoutes';
+app.use('/api/upload', authenticate, standardLimiter, uploadRoutes);
+
 // Database Initialization (assuming initAdminUser and StockModel.initializeTable exist elsewhere or will be added)
 const initDB = async () => {
     try {

@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { StockStatus, Product } from '../../types';
 import { MOCK_PRODUCTS } from './mockData';
-import { Download, Plus, Eye, ChevronLeft, ChevronRight, ChevronDown, Clock, Package, Zap } from 'lucide-react';
+import { Download, Plus, Eye, ChevronLeft, ChevronRight, ChevronDown, Clock, Package, Zap, ShieldCheck, AlertTriangle } from 'lucide-react';
 import AddProductModal from '../../components/AddProductModal';
 import DownloadOptionsModal from '../../components/DownloadOptionsModal';
 import ShipProductModal from '../../components/ShipProductModal';
@@ -189,6 +189,9 @@ const StockList: React.FC = () => {
                                         <th className="py-3 px-6 text-[13px] font-medium text-gray-400 w-24 text-center">操作</th>
                                         <th className="py-3 px-6 text-[13px] font-medium text-gray-400">产品型号</th>
                                         <th className="py-3 px-6 text-[13px] font-medium text-gray-400">产品名称</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400">备货建议</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400">是否备货</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400">呆滞状态</th>
                                         <th className="py-3 px-6 text-[13px] font-medium text-gray-400">库存状态</th>
                                         <th className="py-3 px-6 text-[13px] font-medium text-gray-400 text-right w-24">在库</th>
                                         <th className="py-3 px-6 text-[13px] font-medium text-gray-400 text-right w-24">可用</th>
@@ -242,6 +245,28 @@ const StockList: React.FC = () => {
                                                 </td>
                                                 <td className="py-3 px-6 text-[15px] font-semibold text-gray-900">
                                                     {product.name}
+                                                </td>
+                                                <td className="py-3 px-6">
+                                                    <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold ${product.stockingRecommendation ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
+                                                        {product.stockingRecommendation ? <ShieldCheck size={12} /> : <AlertTriangle size={12} />}
+                                                        {product.stockingRecommendation ? '建议' : '不建议'}
+                                                    </div>
+                                                </td>
+                                                <td className="py-3 px-6">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <div className={`size-2 rounded-full ${product.isStockingEnabled ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'bg-gray-300'}`}></div>
+                                                        <span className={`text-[11px] font-bold ${product.isStockingEnabled ? 'text-blue-600' : 'text-gray-400'}`}>
+                                                            {product.isStockingEnabled ? '已开启' : '未开启'}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="py-3 px-6">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <div className={`size-2 rounded-full ${product.isDeadStock ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`}></div>
+                                                        <span className={`text-[11px] font-bold ${product.isDeadStock ? 'text-red-600' : 'text-emerald-600'}`}>
+                                                            {product.isDeadStock ? '是 (YES)' : '否 (NO)'}
+                                                        </span>
+                                                    </div>
                                                 </td>
                                                 <td className="py-3 px-6">
                                                     <StatusBadge status={product.status as StockStatus} />

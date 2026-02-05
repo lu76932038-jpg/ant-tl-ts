@@ -20,6 +20,11 @@ export interface ProductStrategy {
     is_stocking_enabled?: boolean;
     // Task 48 Permissions
     authorized_viewer_ids?: any; // JSON number[]
+    // Task 60 Stocking Config
+    stocking_period?: number;
+    min_outbound_freq?: number;
+    min_customer_count?: number;
+    buffer_days?: number; // Added for defaults
 
     // New Forecast Config Fields
     benchmark_type?: 'mom' | 'yoy';
@@ -77,6 +82,10 @@ export class StrategyModel {
                     dead_stock_days INT DEFAULT 180,
                     is_stocking_enabled BOOLEAN DEFAULT TRUE,
                     authorized_viewer_ids JSON DEFAULT NULL,
+                    stocking_period INT DEFAULT 3,
+                    min_outbound_freq INT DEFAULT 10,
+                    min_customer_count INT DEFAULT 3,
+                    buffer_days INT DEFAULT 30,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 );
             `);
@@ -109,8 +118,13 @@ export class StrategyModel {
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN auto_replenishment_time VARCHAR(10) DEFAULT NULL");
             // V3.0.1 New Columns
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN dead_stock_days INT DEFAULT 180");
-            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN is_stocking_enabled BOOLEAN DEFAULT TRUE");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN is_stocking_enabled BOOLEAN DEFAULT FALSE");
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN authorized_viewer_ids JSON DEFAULT NULL");
+            // V3.0.1 Task 59: Stocking Strategy Config
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN stocking_period INT DEFAULT 3");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN min_outbound_freq INT DEFAULT 10");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN min_customer_count INT DEFAULT 3");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN buffer_days INT DEFAULT 30");
 
             console.log('product_strategies table initialized/updated.');
 
@@ -150,7 +164,8 @@ export class StrategyModel {
             safety_stock_days, service_level, rop, eoq,
             benchmark_type, mom_range, mom_time_sliders, mom_weight_sliders, yoy_range, yoy_weight_sliders, ratio_adjustment,
             forecast_overrides, calculated_forecasts, supplier_info, replenishment_mode,
-            dead_stock_days, is_stocking_enabled, authorized_viewer_ids
+            dead_stock_days, is_stocking_enabled, authorized_viewer_ids,
+            stocking_period, min_outbound_freq, min_customer_count, buffer_days
         } = strategy;
 
         await pool.execute(
@@ -160,9 +175,10 @@ export class StrategyModel {
                 benchmark_type, mom_range, mom_time_sliders, mom_weight_sliders, yoy_range, yoy_weight_sliders, ratio_adjustment,
                 forecast_overrides, calculated_forecasts, supplier_info, replenishment_mode,
                 auto_replenishment, auto_replenishment_time,
-                dead_stock_days, is_stocking_enabled, authorized_viewer_ids
+                dead_stock_days, is_stocking_enabled, authorized_viewer_ids,
+                stocking_period, min_outbound_freq, min_customer_count, buffer_days
             )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                 start_year_month = VALUES(start_year_month),
                 forecast_cycle = VALUES(forecast_cycle),
@@ -186,7 +202,11 @@ export class StrategyModel {
                 auto_replenishment_time = VALUES(auto_replenishment_time),
                 dead_stock_days = VALUES(dead_stock_days),
                 is_stocking_enabled = VALUES(is_stocking_enabled),
-                authorized_viewer_ids = VALUES(authorized_viewer_ids)
+                authorized_viewer_ids = VALUES(authorized_viewer_ids),
+                stocking_period = VALUES(stocking_period),
+                min_outbound_freq = VALUES(min_outbound_freq),
+                min_customer_count = VALUES(min_customer_count),
+                buffer_days = VALUES(buffer_days)
             `,
             [
                 sku, start_year_month || null, forecast_cycle || 6, forecast_year_month || null,
@@ -202,8 +222,12 @@ export class StrategyModel {
                 strategy.auto_replenishment ?? false,
                 strategy.auto_replenishment_time ?? null,
                 dead_stock_days ?? 180,
-                is_stocking_enabled ?? true,
-                authorized_viewer_ids ? JSON.stringify(authorized_viewer_ids) : null
+                is_stocking_enabled ?? false,
+                authorized_viewer_ids ? JSON.stringify(authorized_viewer_ids) : null,
+                strategy.stocking_period ?? 3,
+                strategy.min_outbound_freq ?? 10,
+                strategy.min_customer_count ?? 3,
+                strategy.buffer_days ?? 30
             ]
         );
     }

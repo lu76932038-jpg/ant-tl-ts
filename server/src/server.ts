@@ -31,6 +31,10 @@ async function initializeDatabase() {
         const { InquiryTaskModel } = require('./models/InquiryTask');
         await InquiryTaskModel.initializeTable();
 
+        // Initialize Community Tables
+        const { CommunityModel } = require('./models/CommunityModel');
+        await CommunityModel.initializeTables();
+
         console.log('数据库初始化成功');
     } catch (error) {
         console.error('数据库初始化失败:', error);

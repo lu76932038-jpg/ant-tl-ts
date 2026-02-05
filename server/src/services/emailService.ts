@@ -230,3 +230,67 @@ export const sendPurchaseOrderNotification = async (recipients: string[], poData
         // Don't throw, just log. Notification failure shouldn't block PO creation.
     }
 };
+
+export const sendQuestionNotification = async (question: any, authorName: string): Promise<void> => {
+    // Admin email from config or hardcoded for MVP
+    const adminEmail = 'admin@example.com';
+
+    // Try to use the config user as admin email if it looks like an email
+    const recipient = config.email.user.includes('@') ? config.email.user : adminEmail;
+
+    try {
+        // Robustness: ensure tags is an array
+        let tags: string[] = [];
+        if (Array.isArray(question.tags)) {
+            tags = question.tags;
+        } else if (typeof question.tags === 'string') {
+            try {
+                tags = JSON.parse(question.tags);
+            } catch (e) {
+                tags = [question.tags];
+            }
+        }
+
+        const content = question.content || '';
+        const title = question.title || '无标题';
+
+        const mailOptions = {
+            from: `"Ant Community" <${config.email.user}>`,
+            to: recipient,
+            subject: `[新提问] ${title}`,
+            text: `社区有新提问：\n标题：${title}\n作者：${authorName}\n标签：${tags.join(', ')}\n\n摘要：${content.substring(0, 100)}...`,
+            html: `
+                <div style="font-family: 'Segoe UI', sans-serif; padding: 20px; color: #333; background-color: #f9fafb;">
+                    <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; border: 1px solid #e5e7eb; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                        <h2 style="color: #7c3aed; margin-top: 0;">社区新提问通知</h2>
+                        <p style="color: #6b7280; font-size: 14px;">有用户发布了新的技术提问，请关注。</p>
+                        
+                        <div style="margin: 20px 0; padding: 20px; background-color: #f3f4f6; border-radius: 8px;">
+                            <h3 style="margin: 0 0 10px 0; font-size: 18px; color: #111827;">${title}</h3>
+                            <div style="margin-bottom: 10px;">
+                                ${tags.map((tag: string) => `<span style="background:#7c3aed; color:white; padding:2px 8px; border-radius:12px; font-size:12px; margin-right:5px;">${tag}</span>`).join('')}
+                            </div>
+                            <p style="font-size: 14px; color: #4b5563; line-height: 1.6;">
+                                ${content.substring(0, 200)}${content.length > 200 ? '...' : ''}
+                            </p>
+                        </div>
+
+                        <div style="display: flex; justify-content: space-between; align-items: center; color: #9ca3af; font-size: 12px; border-top: 1px solid #f3f4f6; padding-top: 20px;">
+                            <span>作者: <strong>${authorName}</strong></span>
+                            <span>时间: ${new Date().toLocaleString()}</span>
+                        </div>
+                        
+                        <div style="margin-top: 20px; text-align: center;">
+                            <a href="http://localhost:3000/community" style="background-color: #7c3aed; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px;">前往社区查看</a>
+                        </div>
+                    </div>
+                </div>
+            `
+        };
+
+        await transporter.sendMail(mailOptions);
+        console.log(`Question notification email sent to ${recipient}`);
+    } catch (error) {
+        console.error('Error sending question notification:', error);
+    }
+};

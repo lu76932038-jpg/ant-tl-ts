@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import {
-    Settings,
+    Package,
     Loader2,
     RefreshCw,
-    Package,
     ShieldCheck,
     Zap,
     Clock,
@@ -11,11 +10,11 @@ import {
     Activity,
     ChevronRight,
     HandIcon,
-    Send,
     Info,
     ArrowDownToLine,
     Layers,
-    History
+    Settings,
+    AlertTriangle
 } from 'lucide-react';
 import { ProductDetailData, StrategyConfig, SupplierInfo } from '../types';
 
@@ -39,13 +38,17 @@ interface InventoryStrategyProps {
 
     hasUnsavedChanges?: boolean;
     supplier?: SupplierInfo | null;
-    onSelectTier?: (tierIndex: number) => void; // 新增：选中阶梯回调
+    onSelectTier?: (tierIndex: number) => void;
 
     autoReplenishment: boolean;
     setAutoReplenishment: (val: boolean) => void;
     autoReplenishmentTime: string;
     setAutoReplenishmentTime: (val: string) => void;
-    isStockingEnabled?: boolean;
+
+    editBufferDays: number;
+    setEditBufferDays: (val: number) => void;
+
+    isStockingEnabled: boolean;
 }
 
 const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
@@ -59,7 +62,8 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
     onSelectTier,
     autoReplenishment, setAutoReplenishment,
     autoReplenishmentTime, setAutoReplenishmentTime,
-    isStockingEnabled = true
+    editBufferDays, setEditBufferDays,
+    isStockingEnabled
 }) => {
     // Local Edit State
     const [isEditing, setIsEditing] = useState(false);
@@ -68,21 +72,21 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
     const [originalValues, setOriginalValues] = useState<{
         safetyStock: number;
         replenishmentCycle: number;
+        bufferDays: number;
         auto: boolean;
         autoTime: string;
     } | null>(null);
 
-    // 新增：手动控制悬浮提示状态
     const [showSSHint, setShowSSHint] = useState(false);
-    const [showROPHint, setShowROPHint] = useState(false);
     const [showRestockHint, setShowRestockHint] = useState(false);
 
     const handleStartEdit = () => {
         setOriginalValues({
             safetyStock: editSafetyStock,
             replenishmentCycle: editReplenishmentCycle,
+            bufferDays: editBufferDays,
             auto: autoReplenishment,
-            autoTime: autoReplenishmentTime
+            autoTime: autoReplenishmentTime,
         });
         setIsEditing(true);
     };
@@ -97,6 +101,7 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
         if (originalValues) {
             setEditSafetyStock(originalValues.safetyStock);
             setEditReplenishmentCycle(originalValues.replenishmentCycle);
+            setEditBufferDays(originalValues.bufferDays);
             setAutoReplenishment(originalValues.auto);
             setAutoReplenishmentTime(originalValues.autoTime);
         }
@@ -106,7 +111,7 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
 
     // --- 算法核心：日级精确滚动及补货量计算 ---
     const calculateDynamicKPIs = () => {
-        if (!data) return { ss: 0, rop: 0, daily: 0, futureSum: 0, leadTimeSum: 0, dateWindow: '', ropWindow: '', leadTimeDays: 0, restockQty: 0, restockCalc: '', today: new Date(), ropEndDate: new Date(), replenishmentBaseSum: 0 };
+        if (!data) return { ss: 0, rop: 0, daily: 0, futureSum: 0, leadTimeSum: 0, dateWindow: '', ropWindow: '', leadTimeDays: 0, restockQty: 0, restockCalc: '', today: new Date(), ropEndDate: new Date(), replenishmentBaseSum: 0, leadTimeDateWindow: '' };
 
         const getDailyForecastForDate = (date: Date) => {
             const y = date.getFullYear();
@@ -128,7 +133,7 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
         const selectedTierIndex = supplier?.priceTiers?.findIndex(t => t.isSelected) ?? -1;
         const leadTimeForCalc = selectedTierIndex !== -1 ? supplier!.priceTiers![selectedTierIndex].leadTime : currentLeadTime;
 
-        // 1. 安全库存窗口 (SS Window) - 基于最小销售周期
+        // 1. 安全库存窗口 (SS Window)
         const ssMonths = editSafetyStock;
         const ssEndDate = new Date(today.getFullYear(), today.getMonth() + ssMonths, today.getDate());
         let preciseFutureSum = 0;
@@ -138,10 +143,9 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
             iterDate.setDate(iterDate.getDate() + 1);
         }
 
-        // 2. 补货基准窗口 (Replenishment Window) - 决定 ROP 的水位
+        // 2. 补货基准窗口 (Replenishment Window)
         const replenishmentMonths = editReplenishmentCycle;
         const replenishmentEndDate = new Date(today.getFullYear(), today.getMonth() + replenishmentMonths, today.getDate());
-
         let replenishmentBaseSum = 0;
         let repIterDate = new Date(today);
         while (repIterDate < replenishmentEndDate) {
@@ -149,28 +153,19 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
             repIterDate.setDate(repIterDate.getDate() + 1);
         }
 
-        // 3. 交期消耗窗口 (LeadTime Window) - 从最小销售周期结束点开始计算交期内的消耗
+        // 3. 交期消耗窗口 (LeadTime Window)
         let leadTimeDemandSum = 0;
         let ltIterDate = new Date(ssEndDate);
         const ropEndDate = new Date(ssEndDate);
         ropEndDate.setDate(ropEndDate.getDate() + leadTimeForCalc);
-
         while (ltIterDate < ropEndDate) {
             leadTimeDemandSum += getDailyForecastForDate(ltIterDate);
             ltIterDate.setDate(ltIterDate.getDate() + 1);
         }
 
-        // 4. 基础指标计算
         const ss = Math.round(preciseFutureSum);
-        // 新逻辑：触发阈值 (ROP) = (最小销售周期 + 交期) 期间的累计销量预期
-        // 这相当于原有的 ss (覆盖最小窗口) + leadTimeSum (覆盖交期窗口)
         const threshold = Math.round(preciseFutureSum + leadTimeDemandSum);
-
-        // 5. 建议补货量计算 (Restock Quantity Logic)
-        // 目标水位 (Target Level) = 安全库存 + 货期内需求 + 补货周期需求
         const targetLevel = Math.round(preciseFutureSum + leadTimeDemandSum + replenishmentBaseSum);
-
-        // 触发条件：(实物库存 + 在途) < 触发点 (ROP)
         const currentTotal = (data.kpi.inStock || 0) + (data.kpi.inTransit || 0);
         let restockQty = 0;
         let restockCalc = "";
@@ -178,62 +173,33 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
         if (currentTotal < threshold) {
             const moq = supplier?.minOrderQty || 1;
             const unit = supplier?.orderUnitQty || 1;
-
             const gap = targetLevel - currentTotal;
             restockQty = Math.max(gap, moq);
-
-            // 考虑订货单位对齐
             if (unit > 1) {
                 restockQty = Math.ceil(restockQty / unit) * unit;
             }
-
-            restockCalc = `目标水位: ${targetLevel} (SS + 货期 + 补货周期)\n有效库存: ${currentTotal} (库存 + 在途)\n计算缺口: ${gap}\n`;
+            restockCalc = `目标水位: ${targetLevel}\n有效库存: ${currentTotal}\n计算缺口: ${gap}\n`;
             if (gap < moq) restockCalc += `修正 (MOQ): ${moq}\n`;
-            if (unit > 1) restockCalc += `单位对齐: ${unit} PCS 的整数倍`;
+            if (unit > 1) restockCalc += `单位对齐: ${unit} PCS`;
         } else {
             restockQty = 0;
-            restockCalc = `供应充足 (${currentTotal}) >= 触发线 (${threshold})\n建议补货量: 0`;
+            restockCalc = `供应充足 (${currentTotal}) >= 触发线 (${threshold})`;
         }
-
-        const dateWindowStr = `${today.toISOString().split('T')[0]} 至 ${new Date(ssEndDate.getTime() - 86400000).toISOString().split('T')[0]}`;
-        const ropWindowStr = `${today.toISOString().split('T')[0]} 至 ${new Date(ropEndDate.getTime() - 86400000).toISOString().split('T')[0]}`;
-
-        const leadTimeDateWindowStr = `${ssEndDate.toISOString().split('T')[0]} 至 ${new Date(ropEndDate.getTime() - 86400000).toISOString().split('T')[0]}`;
 
         return {
             ss,
             rop: threshold,
-            futureSum: Math.round(preciseFutureSum),
+            futureSum: ss,
             replenishmentBaseSum,
             leadTimeSum: Math.round(leadTimeDemandSum),
-            dateWindow: dateWindowStr,
-            ropWindow: ropWindowStr,
-            leadTimeDateWindow: leadTimeDateWindowStr,
-            leadTimeDays: leadTimeForCalc,
-            daily: Math.round(preciseFutureSum / (ssMonths * 30.42)),
+            dateWindow: `${today.toISOString().split('T')[0]} 至 ${new Date(ssEndDate.getTime() - 86400000).toISOString().split('T')[0]}`,
+            leadTimeDateWindow: `${ssEndDate.toISOString().split('T')[0]} 至 ${new Date(ropEndDate.getTime() - 86400000).toISOString().split('T')[0]}`,
             restockQty,
-            restockCalc,
-            today,
-            ropEndDate
+            restockCalc
         };
     };
 
-    const {
-        ss: ssValue,
-        rop: threshold,
-        futureSum,
-        replenishmentBaseSum,
-        leadTimeSum,
-        dateWindow,
-        ropWindow,
-        leadTimeDateWindow,
-        leadTimeDays,
-        restockQty,
-        restockCalc,
-        today,
-        ropEndDate
-    } = calculateDynamicKPIs();
-
+    const { ss: ssValue, rop: threshold, dateWindow, leadTimeDateWindow, restockQty, restockCalc } = calculateDynamicKPIs();
     const unitString = data?.basic.unit || 'PCS';
     const selectedTierIndex = supplier?.priceTiers?.findIndex(t => t.isSelected) ?? -1;
 
@@ -252,7 +218,7 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
 
     return (
         <div className="bg-gradient-to-br from-white to-slate-50/50 rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.05)] ring-1 ring-slate-100 relative z-[40]">
-            {/* 1. Header Area */}
+            {/* 1. Header Area - Restored Premium Style */}
             <div className="px-4 border-b border-slate-100/80 flex items-center justify-between bg-white/50 backdrop-blur-sm h-[84px]">
                 <div className="flex items-center gap-2">
                     <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg shrink-0">
@@ -282,10 +248,9 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
                 </div>
             </div>
 
-            {/* 2. Main Config Panel */}
-            <div className={`px-4 pt-2 pb-2 space-y-2.5 transition-opacity duration-200 ${isEditing ? 'opacity-100' : 'opacity-80 grayscale-[0.3]'}`}>
-
-                {/* 2.1. 销售周期 */}
+            {/* 2. Main Config Panel - Restored Layout */}
+            <div className="px-4 pt-2 pb-2 space-y-4">
+                {/* 2.1. 安全库存周期 (SS Slider) */}
                 <div className="space-y-1 group relative">
                     <div className="flex justify-between items-center px-0.5">
                         <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
@@ -305,7 +270,7 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
                     </div>
                 </div>
 
-                {/* 2.2. 安全库存 */}
+                {/* 2.2. 安全库存卡片 */}
                 <div className="p-2 bg-blue-50/50 rounded-lg border border-blue-100/50 flex flex-col gap-0.5 group relative cursor-help">
                     <div className="flex items-center justify-between px-0.5">
                         <div className="flex items-center gap-2">
@@ -342,16 +307,11 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
                     <div className="text-sm font-mono font-black text-blue-700 pl-0.5">
                         {ssValue.toLocaleString()} <span className="text-[9px] font-bold opacity-70">{unitString}</span>
                     </div>
-                    <Tooltip
-                        title="日级滚动安全库存计算"
-                        formula="滚动窗口逐日预测累加"
-                        calc={`采样窗口: [${dateWindow}]\n累计预测: ${futureSum.toLocaleString()} PCS (整数取整)\n计算结果: ${ssValue.toLocaleString()} ${unitString}`}
-                    />
                 </div>
 
                 <div className="h-px bg-slate-100 w-full" />
 
-                {/* 2.3. 补货设置 */}
+                {/* 2.3. 交期与阶梯选择 */}
                 <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-0.5">补货设置</label>
                     <div className="relative">
@@ -376,7 +336,7 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
                     </div>
                 </div>
 
-                {/* 2.4. 订货点（ROP）详情 */}
+                {/* 2.4. ROP 详情卡片 */}
                 <div className="bg-orange-50/40 p-2 rounded-lg border border-orange-100/50 flex flex-col gap-0.5 group relative cursor-help shadow-sm">
                     <div className="flex items-center justify-between px-0.5">
                         <div className="flex items-center gap-2">
@@ -395,11 +355,11 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
                     <Tooltip
                         title="ROP 补货公式"
                         formula="(最小销售周期 + 货期) 销售预期"
-                        calc={`安全库存(覆盖最小周期): ${ssValue.toLocaleString()}\n货期预测周期: ${leadTimeDateWindow}\n货期预测数量: ${leadTimeSum.toLocaleString()}\n计算结果: ${threshold.toLocaleString()}`}
+                        calc={`安全库存(覆盖最小周期): ${ssValue.toLocaleString()}\n货期预测周期: ${leadTimeDateWindow}\n计算结果: ${threshold.toLocaleString()}`}
                     />
                 </div>
 
-                {/* 2.3.1. 补货销售周期滑块 (影响 ROP) */}
+                {/* 2.5. 补货周期滑块 (Replenishment Cycle) */}
                 <div className="space-y-3 bg-indigo-50/30 p-2.5 rounded-xl border border-indigo-100/50">
                     <div className="flex justify-between items-center px-0.5">
                         <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-700 uppercase tracking-wider">
@@ -419,102 +379,87 @@ const InventoryStrategy: React.FC<InventoryStrategyProps> = ({
                     </div>
                 </div>
 
-            </div>
-
-            {/* 2.5. 补货触发方式 */}
-            <div className="space-y-1 relative">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block ml-0.5">补货触发方式</label>
-                <div className={`grid grid-cols-2 gap-1 bg-slate-100/60 p-0.5 rounded-lg border border-slate-200/40 ${!isStockingEnabled && 'opacity-50 pointer-events-none'}`}>
-                    <button
-                        onClick={() => isEditing && setAutoReplenishment(false)}
-                        className={`flex items-center justify-center gap-1 py-1 rounded transition-all duration-200 text-[10px] font-bold ${!autoReplenishment ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:bg-slate-200/40'}`}
-                    >
-                        <HandIcon size={10} />
-                        手动
-                    </button>
-                    <button
-                        onClick={() => isEditing && setAutoReplenishment(true)}
-                        className={`flex items-center justify-center gap-1 py-1 rounded transition-all duration-200 text-[10px] font-bold ${autoReplenishment ? 'bg-white text-emerald-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:bg-slate-200/40'}`}
-                    >
-                        <Zap size={10} />
-                        自动
-                    </button>
-                </div>
-            </div>
-
-            {/* 2.6. 补货执行与详情 */}
-            <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                {!isStockingEnabled ? (
-                    <div className="w-full py-1.5 bg-gray-100 text-gray-400 rounded-lg border border-gray-200 flex items-center justify-center gap-1.5 cursor-not-allowed">
-                        <span className="text-[10px] font-bold">备货已暂停</span>
-                    </div>
-                ) : (
-                    <>
-                        {/* 补货详情摘要 */}
-                        <div className="bg-slate-50 rounded-lg border border-slate-100 p-2 flex items-center justify-between group relative cursor-help">
-                            <div className="flex items-center gap-2">
-                                <div className="p-1 bg-white rounded shadow-xs text-indigo-500">
-                                    <ArrowDownToLine size={12} />
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="text-[9px] font-bold text-slate-400 uppercase leading-none">建议补货量</span>
-                                    <span className={`text-xs font-black mt-0.5 ${restockQty > 0 ? 'text-indigo-600' : 'text-slate-400'}`}>
-                                        {restockQty.toLocaleString()} <span className="text-[10px] font-bold opacity-70">{unitString}</span>
-                                    </span>
-                                </div>
+                {/* 2.6. 补货触发方式选择 */}
+                <div className="space-y-1 relative">
+                    <div className="flex items-center justify-between ml-0.5">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">补货触发方式</label>
+                        {!isStockingEnabled && (
+                            <div className="flex items-center gap-1 text-[9px] font-bold text-orange-500 animate-pulse">
+                                <AlertTriangle size={10} />
+                                未开启备货
                             </div>
-                            <div
-                                onMouseEnter={() => setShowRestockHint(true)}
-                                onMouseLeave={() => setShowRestockHint(false)}
-                                className="p-1 hover:bg-indigo-50 rounded-full transition-colors"
-                            >
-                                <Info size={12} className="text-indigo-400" />
-                            </div>
-
-                            {showRestockHint && (
-                                <div className="absolute bottom-full right-0 mb-3 w-[240px] bg-[#1e293b] border border-white/10 text-white p-3.5 rounded-xl shadow-2xl z-[200] animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200">
-                                    <div className="flex items-center gap-2 mb-2 border-b border-white/10 pb-2">
-                                        <Calculator size={14} className="text-indigo-400" />
-                                        <span className="text-[11px] font-black text-indigo-300 uppercase tracking-widest">补货量计算引擎</span>
-                                    </div>
-                                    <div className="space-y-3 text-[11px]">
-                                        <div className="bg-white/5 p-2.5 rounded-lg border border-white/5 font-mono text-slate-300 whitespace-pre-wrap leading-relaxed">
-                                            {restockCalc}
-                                        </div>
-                                        <div className="text-[10px] text-slate-500 italic leading-snug">
-                                            * 说明：当 (库存+在途) 低于 ROP 时触发补货，补齐至 (SS + 货期预测 + 补货周期预测) 的目标水位。
-                                        </div>
-                                    </div>
-                                    <div className="absolute top-[calc(100%-8px)] right-3 w-4 h-4 bg-[#1e293b] rotate-45 border-r border-b border-white/10" />
-                                </div>
-                            )}
-                        </div>
-
-                        {autoReplenishment ? (
-                            <div className="flex items-center justify-between bg-emerald-50/50 border border-emerald-100 p-1.5 rounded-lg">
-                                <div className="flex items-center gap-1.5">
-                                    <Clock size={12} className="text-emerald-600" />
-                                    <span className="text-[10px] font-bold text-emerald-900">运行时间</span>
-                                </div>
-                                <input
-                                    type="time" value={autoReplenishmentTime}
-                                    onChange={(e) => setAutoReplenishmentTime(e.target.value)}
-                                    disabled={!isEditing}
-                                    className="bg-white border-none px-1.5 py-0 rounded text-[10px] font-bold text-emerald-700 shadow-sm focus:ring-0 w-[80px] h-5 disabled:opacity-50"
-                                />
-                            </div>
-                        ) : (
-                            <button
-                                onClick={() => onCreatePlan(restockQty)}
-                                disabled={isCreatingPO || restockQty <= 0}
-                                className="w-full py-2 bg-indigo-600 text-white rounded-lg shadow-sm shadow-indigo-100 flex items-center justify-center gap-1.5 hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50 pointer-events-auto"
-                            >
-                                {isCreatingPO ? <Loader2 size={12} className="animate-spin" /> : <Layers size={12} />}
-                                <span className="text-[10px] font-black tracking-tight uppercase">立即生成采购计划</span>
-                            </button>
                         )}
-                    </>
-                )}
+                    </div>
+                    <div className={`grid grid-cols-2 gap-1 bg-slate-100/60 p-0.5 rounded-lg border border-slate-200/40`}>
+                        <button
+                            onClick={() => isEditing && setAutoReplenishment(false)}
+                            className={`flex items-center justify-center gap-1 py-1 rounded transition-all duration-200 text-[10px] font-bold ${!autoReplenishment ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:bg-slate-200/40'}`}
+                        >
+                            <HandIcon size={10} /> 手动
+                        </button>
+                        <button
+                            onClick={() => isEditing && isStockingEnabled && setAutoReplenishment(true)}
+                            disabled={!isEditing || !isStockingEnabled}
+                            className={`flex items-center justify-center gap-1 py-1 rounded transition-all duration-200 text-[10px] font-bold ${autoReplenishment ? 'bg-white text-emerald-600 shadow-sm ring-1 ring-black/5' : 'text-slate-500 hover:bg-slate-200/40'} disabled:opacity-30 disabled:cursor-not-allowed`}
+                            title={!isStockingEnabled ? "必须开启备货才能启用自动补货" : ""}
+                        >
+                            <Zap size={10} /> 自动
+                        </button>
+                    </div>
+                </div>
+
+                {/* 2.7. 补货摘要与执行按钮 */}
+                <div className="space-y-2">
+                    <div className="bg-slate-50 rounded-lg border border-slate-100 p-2 flex items-center justify-between group relative cursor-help">
+                        <div className="flex items-center gap-2">
+                            <div className="p-1 bg-white rounded shadow-xs text-indigo-500">
+                                <ArrowDownToLine size={12} />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[9px] font-bold text-slate-400 uppercase leading-none">建议补货量</span>
+                                <span className={`text-xs font-black mt-0.5 ${restockQty > 0 ? 'text-indigo-600' : 'text-slate-400'}`}>
+                                    {restockQty.toLocaleString()} <span className="text-[10px] font-bold opacity-70">{unitString}</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div
+                            onMouseEnter={() => setShowRestockHint(true)}
+                            onMouseLeave={() => setShowRestockHint(false)}
+                            className="p-1 hover:bg-indigo-50 rounded-full transition-colors"
+                        >
+                            <Info size={12} className="text-indigo-400" />
+                        </div>
+                        {showRestockHint && (
+                            <div className="absolute bottom-full right-0 mb-3 w-[240px] bg-[#1e293b] border border-white/10 text-white p-3.5 rounded-xl shadow-2xl z-[200] animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-200 text-[11px] whitespace-pre-wrap leading-relaxed">
+                                {restockCalc}
+                            </div>
+                        )}
+                    </div>
+
+                    {autoReplenishment ? (
+                        <div className="flex items-center justify-between bg-emerald-50/50 border border-emerald-100 p-1.5 rounded-lg">
+                            <div className="flex items-center gap-1.5">
+                                <Clock size={12} className="text-emerald-600" />
+                                <span className="text-[10px] font-bold text-emerald-900">运行时间</span>
+                            </div>
+                            <input
+                                type="time" value={autoReplenishmentTime}
+                                onChange={(e) => setAutoReplenishmentTime(e.target.value)}
+                                disabled={!isEditing}
+                                className="bg-white border-none px-1.5 py-0 rounded text-[10px] font-bold text-emerald-700 shadow-sm focus:ring-0 w-[80px] h-5 disabled:opacity-50"
+                            />
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => onCreatePlan(restockQty)}
+                            disabled={isCreatingPO || restockQty <= 0}
+                            className="w-full py-2 bg-indigo-600 text-white rounded-lg shadow-sm shadow-indigo-100 flex items-center justify-center gap-1.5 hover:bg-indigo-700 active:scale-[0.98] transition-all disabled:opacity-50"
+                        >
+                            {isCreatingPO ? <Loader2 size={12} className="animate-spin" /> : <Layers size={12} />}
+                            <span className="text-[10px] font-black tracking-tight uppercase">立即生成采购计划</span>
+                        </button>
+                    )}
+                </div>
             </div>
         </div>
     );

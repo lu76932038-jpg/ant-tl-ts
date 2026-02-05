@@ -22,6 +22,8 @@ interface ChartData {
     forecastCustomerCount?: number;
     inbound?: number;
     outbound?: number;
+    actualOrderCount?: number; // Added for stocking stats
+
 
     // Simulation Fields
     simStock?: number; // Simulated Stock Level
@@ -53,7 +55,8 @@ export class ProductController {
                     DATE_FORMAT(outbound_date, '%Y-%m') as month,
                     SUM(quantity) as total_qty,
                     SUM(quantity * unit_price) as total_amount,
-                    COUNT(DISTINCT customer_name) as customer_count
+                    COUNT(DISTINCT customer_name) as customer_count,
+                    COUNT(DISTINCT outbound_id) as order_count
                  FROM shiplist
                  WHERE product_model = ?
                  GROUP BY month
@@ -258,7 +261,8 @@ export class ProductController {
                 historyMap.set(r.month, {
                     qty: Number(r.total_qty),
                     amount: Number(r.total_amount),
-                    customers: Number(r.customer_count)
+                    customers: Number(r.customer_count),
+                    orders: Number(r.order_count)
                 });
                 if (Number(r.total_qty) > 0) {
                     recentPrice = Number(r.total_amount) / Number(r.total_qty);
@@ -279,7 +283,7 @@ export class ProductController {
                 const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; // Strict format YYYY-MM
                 const displayDate = `${d.getFullYear()} - ${String(d.getMonth() + 1).padStart(2, '0')}`;
 
-                const data = historyMap.get(monthStr) || { qty: 0, amount: 0, customers: 0 };
+                const data = historyMap.get(monthStr) || { qty: 0, amount: 0, customers: 0, orders: 0 };
                 const inboundVal = inboundMap.get(monthStr) || 0;
 
                 timelineQty.push(data.qty);
@@ -292,6 +296,7 @@ export class ProductController {
                     actualQty: data.qty,
                     actualAmount: data.amount,
                     actualCustomerCount: data.customers,
+                    actualOrderCount: data.orders,
                     outbound: data.qty,
                     inbound: inboundVal
                 });

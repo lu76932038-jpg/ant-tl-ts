@@ -68,7 +68,14 @@ const ProductDetail: React.FC = () => {
     const [autoReplenishmentTime, setAutoReplenishmentTime] = useState('08:00');
     // V3.0.1 任务55 & 57
     const [deadStockDays, setDeadStockDays] = useState<number>(180);
-    const [isStockingEnabled, setIsStockingEnabled] = useState<boolean>(true);
+    const [isStockingEnabled, _setIsStockingEnabled] = useState(false);
+    const setIsStockingEnabled = (val: boolean) => {
+        _setIsStockingEnabled(val);
+        // Linkage: If stocking is disabled, force manual replenishment
+        if (!val) {
+            setAutoReplenishment(false);
+        }
+    };
     // V3.0.1 Task 48: Data Permission
     const [authorizedIds, setAuthorizedIds] = useState<number[]>([]);
     const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
@@ -120,6 +127,17 @@ const ProductDetail: React.FC = () => {
     const [yoyRange, setYoyRange] = useState<1 | 2 | 3>(3);
     const [yoyWeightSliders, setYoyWeightSliders] = useState<number[]>([33, 66]);
 
+    // V3.0.1 Task 59: Stocking Strategy Config
+    const [stockingPeriod, setStockingPeriod] = useState<number>(3);
+    const [minOutboundFreq, setMinOutboundFreq] = useState<number>(10);
+    const [minCustomerCount, setMinCustomerCount] = useState<number>(3);
+
+    // V3.0.1 Task: Stocking Stats from Backend
+    const [stats, setStats] = useState<{ outboundCount: number; distinctCustomerCount: number }>({
+        outboundCount: 0,
+        distinctCustomerCount: 0
+    });
+
     // Forecast Adjustment
     const [forecastOverrides, setForecastOverrides] = useState<Record<string, number>>({});
     const [calculatedForecasts, setCalculatedForecasts] = useState<Record<string, number>>({});
@@ -148,6 +166,13 @@ const ProductDetail: React.FC = () => {
             fetchLogs();
         }
     }, [sku]);
+
+    // Linkage: Re-fetch stats when period changes
+    useEffect(() => {
+        if (sku && data) {
+            fetchStockingStats();
+        }
+    }, [sku, stockingPeriod, data]); // Depend on data to ensure charts are loaded
 
     // ... fetch functions unchanged ...
 
@@ -198,6 +223,11 @@ const ProductDetail: React.FC = () => {
             // V3.0.1 任务55 & 57
             if (result.strategy.dead_stock_days) setDeadStockDays(result.strategy.dead_stock_days);
             if (result.strategy.is_stocking_enabled !== undefined) setIsStockingEnabled(result.strategy.is_stocking_enabled);
+
+            // V3.0.1 Task 59
+            if (result.strategy.stocking_strategy_period) setStockingPeriod(result.strategy.stocking_strategy_period);
+            if (result.strategy.min_outbound_freq) setMinOutboundFreq(result.strategy.min_outbound_freq);
+            if (result.strategy.min_customer_count) setMinCustomerCount(result.strategy.min_customer_count);
 
             // V3.0.1 Task 48: Load Permissions
             if (result.strategy.authorized_viewer_ids) {
@@ -250,6 +280,26 @@ const ProductDetail: React.FC = () => {
             setLogs(result);
         } catch (error) {
             console.error('Failed to fetch logs', error);
+        }
+
+
+    };
+
+    // V3.0.1: Simulate Backend Stats Calculation
+    // In a real scenario, this would be: await api.get(`/products/${sku}/stocking-stats?period=${stockingPeriod}`)
+    // V3.0.1: Fetch Real Stats from Backend
+    const fetchStockingStats = async () => {
+        if (!sku) return;
+
+        try {
+            const result: any = await api.get(`/stocks/${sku}/stocking-stats?period=${stockingPeriod}`);
+            setStats({
+                outboundCount: result.outboundCount,
+                distinctCustomerCount: result.distinctCustomerCount
+            });
+        } catch (error) {
+            console.error('Failed to fetch stocking stats', error);
+            // Fallback to simulation if endpoint fails (or keeps 0)
         }
     };
 
@@ -382,16 +432,18 @@ const ProductDetail: React.FC = () => {
         if (!data) return [];
 
         // Calculate averages for fallback (Price & Customer Ratio)
-        let totalQty = 0, totalAmount = 0, totalCustomers = 0;
+        let totalQty = 0, totalAmount = 0, totalCustomers = 0, totalOrders = 0;
         data.charts.forEach(c => {
             if (c.actualQty > 0) {
                 totalQty += c.actualQty;
                 totalAmount += (c.actualAmount || 0);
                 totalCustomers += (c.actualCustomerCount || 0);
+                totalOrders += (c.actualOrderCount || (c.actualCustomerCount || 0) * 1.2); // Fallback: 1.2 * customers
             }
         });
         const avgPrice = totalQty > 0 ? totalAmount / totalQty : 0;
         const avgCustomerRatio = totalQty > 0 ? totalCustomers / totalQty : 0;
+        const avgOrderRatio = totalQty > 0 ? totalOrders / totalQty : 0;
 
         // 1. Generate Complete Date Range List
         let allMonths: string[] = [];
@@ -426,8 +478,8 @@ const ProductDetail: React.FC = () => {
                     month: monthKey,
                     fullDate: `${y}年${parseInt(m)}月`,
                     type: 'future', // Default to future for missing tail data
-                    actualQty: 0, actualAmount: 0, actualCustomerCount: 0,
-                    forecastQty: 0, forecastAmount: 0, forecastCustomerCount: 0,
+                    actualQty: 0, actualAmount: 0, actualOrderCount: 0, actualCustomerCount: 0,
+                    forecastQty: 0, forecastAmount: 0, forecastOrderCount: 0, forecastCustomerCount: 0,
                     inbound: 0, outbound: 0, simStock: 0, simRop: 0, simSafety: 0
                 };
             }
@@ -462,6 +514,12 @@ const ProductDetail: React.FC = () => {
                 : (d.actualCustomerCount && d.actualQty ? d.actualCustomerCount / d.actualQty : avgCustomerRatio);
             if (custRatio === 0) custRatio = avgCustomerRatio;
 
+            // Order Ratio estimation with fallback
+            let orderRatio = (baseForecast > 0 && d.forecastOrderCount)
+                ? d.forecastOrderCount / baseForecast
+                : (d.actualOrderCount && d.actualQty ? d.actualOrderCount / d.actualQty : avgOrderRatio);
+            if (orderRatio === 0) orderRatio = avgOrderRatio;
+
             // Logic: Display Forecast = Max(Actual, BaseForecast)
             // Implemented via Stacked Bars:
             // Bar 1 (Bottom): ActualQty
@@ -485,6 +543,12 @@ const ProductDetail: React.FC = () => {
                 ? d.forecastCustomerCount
                 : Math.round(finalForecastQty * custRatio));
 
+            // Recalculate forecast orders
+            const useOriginalOrder = d.forecastOrderCount && d.forecastOrderCount > 0 && baseForecast === d.forecastQty;
+            const finalForecastOrderCount = isPast ? null : (useOriginalOrder
+                ? d.forecastOrderCount
+                : Math.round(finalForecastQty * orderRatio));
+
             // Determine if strictly future
             const isStrictlyFuture = monthKey > currentMonthKey;
 
@@ -494,10 +558,12 @@ const ProductDetail: React.FC = () => {
                 forecastRemainder: remainder, // The part to stack on top of actual (0 for past)
                 forecastAmount: finalForecastAmount,
                 forecastCustomerCount: finalForecastCustomerCount,
+                forecastOrderCount: finalForecastOrderCount,
                 actualQty: actual,
                 // If strictly future, force actuals to null so lines break instead of drop to 0
                 actualAmount: isStrictlyFuture ? null : d.actualAmount,
-                actualCustomerCount: isStrictlyFuture ? null : d.actualCustomerCount
+                actualCustomerCount: isStrictlyFuture ? null : d.actualCustomerCount,
+                actualOrderCount: isStrictlyFuture ? null : (d.actualOrderCount || (d.actualCustomerCount ? Math.ceil(d.actualCustomerCount * 1.3) : 0))
             };
         });
 
@@ -510,18 +576,20 @@ const ProductDetail: React.FC = () => {
                         month: year,
                         fullDate: year + '年',
                         type: d.type,
-                        actualQty: 0, actualAmount: 0, actualCustomerCount: 0,
-                        forecastQty: 0, forecastRemainder: 0, forecastAmount: 0, forecastCustomerCount: 0,
+                        actualQty: 0, actualAmount: 0, actualOrderCount: 0, actualCustomerCount: 0,
+                        forecastQty: 0, forecastRemainder: 0, forecastAmount: 0, forecastOrderCount: 0, forecastCustomerCount: 0,
                         inbound: 0, simStock: 0, count: 0
                     });
                 }
                 const y = yearMap.get(year);
                 y.actualQty += (d.actualQty || 0);
                 y.actualAmount += (d.actualAmount || 0);
+                y.actualOrderCount += (d.actualOrderCount || 0);
                 y.actualCustomerCount += (d.actualCustomerCount || 0);
                 y.forecastQty += (d.forecastQty || 0);
                 y.forecastRemainder += (d.forecastRemainder || 0);
                 y.forecastAmount += (d.forecastAmount || 0);
+                y.forecastOrderCount += (d.forecastOrderCount || 0);
                 y.forecastCustomerCount += (d.forecastCustomerCount || 0);
                 y.inbound += (d.inbound || 0);
                 y.simStock += d.simStock;
@@ -539,6 +607,7 @@ const ProductDetail: React.FC = () => {
                     // If past year, force forecasts to null to break the line on chart
                     forecastQty: isPastYear ? null : y.forecastQty,
                     forecastAmount: isPastYear ? null : y.forecastAmount,
+                    forecastOrderCount: isPastYear ? null : y.forecastOrderCount,
                     forecastCustomerCount: isPastYear ? null : y.forecastCustomerCount,
                     // Ensure forecast remainder is also cleared
                     forecastRemainder: isPastYear ? 0 : y.forecastRemainder
@@ -748,6 +817,12 @@ const ProductDetail: React.FC = () => {
             // Even if the user has changed these in the UI (Draft state), we don't save them here.
             safety_stock_days: strategy.safety_stock_days,
             replenishment_mode: strategy.replenishment_mode,
+
+            // Task 59 Save
+            stocking_strategy_period: stockingPeriod,
+            min_outbound_freq: minOutboundFreq,
+            min_customer_count: minCustomerCount,
+
             supplier_info: strategy.supplier_info,
 
             log_content: `更新销售预测配置: 基准 ${effectiveConfig.benchmark_type === 'mom' ? '环比' : '同比'}, 比率调整 ${effectiveConfig.ratio_adjustment}%`
@@ -937,14 +1012,24 @@ const ProductDetail: React.FC = () => {
 
                         <div className="col-span-2 space-y-6 sticky top-[100px] self-start">
 
-                            {/* New: Stocking Config (Task 56 & 57) */}
+                            {/* 1. Stocking Configuration Strategy (Task 59) - Moved from Middle/Inventory */}
                             <StockingConfig
-                                enabled={isStockingEnabled}
-                                setEnabled={setIsStockingEnabled}
+                                data={data}
                                 isSaving={isSaving}
+                                onSave={() => handleSaveStrategy()}
+                                stockingPeriod={stockingPeriod}
+                                setStockingPeriod={setStockingPeriod}
+                                minOutboundFreq={minOutboundFreq}
+                                setMinOutboundFreq={setMinOutboundFreq}
+                                minCustomerCount={minCustomerCount}
+                                setMinCustomerCount={setMinCustomerCount}
+                                isStockingEnabled={isStockingEnabled}
+                                setIsStockingEnabled={setIsStockingEnabled}
+                                actualOutboundCount={stats.outboundCount}
+                                actualDistinctCustomers={stats.distinctCustomerCount}
                             />
 
-                            {/* 0. Sales Forecast Config (Permission Gated) */}
+                            {/* 2. Sales Forecast Config (Permission Gated) */}
                             {((!user || user.role === 'admin') || (user.id && authorizedIds.includes(user.id))) ? (
                                 <ForecastConfig
                                     isSaving={isSaving}
@@ -977,13 +1062,15 @@ const ProductDetail: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* 2. Dead Stock Config (Moved from Right) */}
+                            {/* 3. Dead Stock Config */}
                             <DeadStockConfig
                                 deadStockDays={deadStockDays}
                                 setDeadStockDays={setDeadStockDays}
-                                lastOutboundDate={data?.charts?.find(c => c.outbound && c.outbound > 0)?.month || '无记录'}
+                                // Find the LATEST month with outbound > 0. Reverse charts to find from end (most recent).
+                                lastOutboundDate={[...(data?.charts || [])].reverse().find(c => c.outbound && c.outbound > 0)?.month || '无记录'}
                                 isSaving={isSaving}
                                 onSave={() => handleSaveStrategy()}
+                                currentStock={data?.kpi?.inStock || 0}
                             />
 
                         </div>
@@ -1065,7 +1152,8 @@ const ProductDetail: React.FC = () => {
 
                         {/* Right Column: Execute & Strategy (2 cols) - Sticky */}
                         <div className="col-span-2 space-y-6 sticky top-[100px] self-start">
-                            {/* 1. Inventory Strategy Config (Moved to Right Top) */}
+
+                            {/* 1. Inventory Strategy - Moved from Left */}
                             <InventoryStrategy
                                 data={data}
                                 strategy={strategy}
@@ -1075,21 +1163,32 @@ const ProductDetail: React.FC = () => {
                                 setEditSafetyStock={setEditSafetyStock}
                                 editReplenishmentCycle={editReplenishmentCycle}
                                 setEditReplenishmentCycle={setEditReplenishmentCycle}
+                                editBufferDays={editBufferDays}
+                                setEditBufferDays={setEditBufferDays}
                                 replenishmentMode={replenishmentMode}
                                 setReplenishmentMode={setReplenishmentMode}
-                                currentLeadTime={currentLeadTime}
+                                currentLeadTime={supplier?.leadTimeEconomic || 30}
                                 isCreatingPO={isCreatingPO}
                                 onCreatePlan={handleCreatePlan}
-                                hasUnsavedChanges={hasUnsavedChanges}
-                                supplier={editSupplierInfo}
-                                onSelectTier={handleSelectTier}
+                                supplier={supplier}
+                                onSelectTier={(idx) => {
+                                    if (!supplier || !supplier.priceTiers || !supplier.priceTiers[idx]) return;
+                                    const newTiers = supplier.priceTiers.map((t, i) => ({
+                                        ...t,
+                                        isSelected: i === idx
+                                    }));
+                                    const newSupplier = { ...supplier, priceTiers: newTiers };
+                                    setEditSupplierInfo(newSupplier);
+                                    setSupplier(newSupplier);
+                                }}
                                 autoReplenishment={autoReplenishment}
                                 setAutoReplenishment={setAutoReplenishment}
                                 autoReplenishmentTime={autoReplenishmentTime}
                                 setAutoReplenishmentTime={setAutoReplenishmentTime}
                                 isStockingEnabled={isStockingEnabled}
                             />
-                            {/* 2. Supplier Card (Moved from Left) */}
+
+                            {/* 2. Supplier Card */}
                             <SupplierCard
                                 sku={data.basic.sku}
                                 supplier={supplier}

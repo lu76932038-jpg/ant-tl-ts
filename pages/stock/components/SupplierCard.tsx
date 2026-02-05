@@ -252,9 +252,7 @@ const SupplierCard: React.FC<SupplierCardProps> = ({ sku, supplier, isSaving, on
                             )}
                         </div>
                     </div>
-                    <div className="text-[9px] text-slate-400 ml-1">
-                        补货量 = max(需求量, MOQ)，并向上取整到订货单位的倍数
-                    </div>
+
                 </div>
 
 

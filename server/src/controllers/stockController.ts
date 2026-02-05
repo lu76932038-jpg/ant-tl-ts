@@ -10,25 +10,36 @@ export class StockController {
     static async getAllStocks(req: Request, res: Response) {
         try {
             // 1. Parallel Fetching of all necessary data
+            // 1. Parallel Fetching of all necessary data
             const [
                 stocks,
                 salesRows,
                 strategyRows,
-                supplierRows
+                supplierRows,
+                stockingSalesRows // New: Fetch data for stocking logic
             ] = await Promise.all([
                 StockModel.findAll(),
-                // Sales 30 Days
+                // Sales 30 Days (Keep for turnover calculation)
                 pool.execute<RowDataPacket[]>(`
                     SELECT product_model, SUM(quantity) as qty 
                     FROM shiplist 
                     WHERE outbound_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
                     GROUP BY product_model
                 `).then(res => res[0]),
-                // Safety Stock & Permissions Settings
+                // Safety Stock & Permissions & Stocking Config
                 pool.execute<RowDataPacket[]>(`
-                    SELECT sku, safety_stock_days, authorized_viewer_ids FROM product_strategies
+                    SELECT 
+                        sku, 
+                        safety_stock_days, 
+                        authorized_viewer_ids,
+                        is_stocking_enabled,
+                        stocking_period,
+                        min_outbound_freq,
+                        min_customer_count,
+                        dead_stock_days
+                    FROM product_strategies
                 `).then(res => res[0]),
-                // Supplier Lead Times (Selected Tier > Default Strategy > Fallback)
+                // Supplier Lead Times
                 pool.execute<RowDataPacket[]>(`
                     SELECT 
                         pss.sku,
@@ -37,6 +48,13 @@ export class StockController {
                     LEFT JOIN supplier_price_tiers spt 
                         ON pss.id = spt.strategy_id AND spt.is_selected = 1
                     WHERE pss.is_default = 1
+                `).then(res => res[0]),
+                // Sales History for Stocking Rec (Last 24 Months)
+                // We need raw data to calculate distincts over dynamic periods per product
+                pool.execute<RowDataPacket[]>(`
+                    SELECT product_model, outbound_date, outbound_id, customer_name
+                    FROM shiplist 
+                    WHERE outbound_date >= DATE_SUB(CURDATE(), INTERVAL 24 MONTH)
                 `).then(res => res[0])
             ]);
 
@@ -45,12 +63,12 @@ export class StockController {
             const userId = user?.id; // Assuming number
             const userRole = user?.role; // 'admin' | 'user'
 
-            // Build Authorization Map first to filter stocks
-            const authorizedMap = new Map<string, number[]>(); // SKU -> UserIDs
-            const safetyStockMap = new Map<string, number>();
+            // Build Maps
+            const authorizedMap = new Map<string, number[]>();
+            const strategyMap = new Map<string, any>(); // Store full strategy row
 
             strategyRows.forEach((row: any) => {
-                safetyStockMap.set(row.sku, Number(row.safety_stock_days));
+                strategyMap.set(row.sku, row);
 
                 let viewerIds: number[] = [];
                 try {
@@ -60,60 +78,91 @@ export class StockController {
                             : row.authorized_viewer_ids;
                     }
                 } catch (e) { viewerIds = []; }
-
                 authorizedMap.set(row.sku, Array.isArray(viewerIds) ? viewerIds : []);
             });
 
-            // Filter Stocks:
-            // - Admins see ALL
-            // - Users see ONLY if their ID is in authorized_viewer_ids
-            console.log(`[PermissionDebug] User: ${userId} (${userRole}), Total Stocks: ${stocks.length}`);
-
+            // Filter Stocks
             const visibleStocks = stocks.filter(stock => {
                 if (!userRole || userRole === 'admin') return true;
-
-                // For normal users:
                 const allowedIds = (authorizedMap.get(stock.sku) || []).map(id => Number(id));
-                const hasPermission = allowedIds.includes(Number(userId));
-
-                // Log only first few failures to avoid spam
-                if (!hasPermission && Math.random() < 0.01) {
-                    console.log(`[PermissionDebug] Deny ${stock.sku} for User ${userId}. Allowed: ${JSON.stringify(allowedIds)}`);
-                }
-                return hasPermission;
+                return allowedIds.includes(Number(userId));
             });
-            console.log(`[PermissionDebug] Visible Stocks: ${visibleStocks.length}`);
 
-            // 2. Build remaining Lookup Maps based on filtered/visible stocks (Optimization optional, but keeping simple)
+            // 2. Build remaining Lookup Maps
             const salesMap = new Map<string, number>();
             salesRows.forEach((row: any) => salesMap.set(row.product_model, Number(row.qty)));
 
             const leadTimeMap = new Map<string, number>();
             supplierRows.forEach((row: any) => leadTimeMap.set(row.sku, Number(row.effective_lead_time)));
 
+            // Group Stocking Sales Data by Product for fast access
+            const stockingSalesMap = new Map<string, any[]>();
+            (stockingSalesRows as any[]).forEach((row: any) => {
+                if (!stockingSalesMap.has(row.product_model)) {
+                    stockingSalesMap.set(row.product_model, []);
+                }
+                stockingSalesMap.get(row.product_model)?.push(row);
+            });
+
             // 3. Dynamic Calculation & Enrichment
             const enrichedStocks = visibleStocks.map(stock => {
                 const sales30Days = salesMap.get(stock.sku) || 0;
-                const leadTime = leadTimeMap.get(stock.sku) || 30; // Default 30 days
-                const safetyStockDaysRaw = safetyStockMap.get(stock.sku);
-                const safetyStockDays = safetyStockDaysRaw !== undefined ? safetyStockDaysRaw : 0.6; // Default 0.6 months (~18 days)
+                const leadTime = leadTimeMap.get(stock.sku) || 30;
+                const strat = strategyMap.get(stock.sku) || {};
 
-                // Convert Safety Stock Months to Days (Approx)
-                const safetyDaysObj = safetyStockDays * 30;
+                const safetyStockDaysRaw = strat.safety_stock_days;
+                const safetyStockDays = safetyStockDaysRaw !== undefined ? safetyStockDaysRaw : 0.6;
+                const safetyDaysObj = safetyStockDays * 30; // Approx
 
                 const turnoverDays = StockService.calculateTurnoverDays(stock.inStock, sales30Days);
                 const riskLevel = StockService.calculateRiskLevel(turnoverDays, leadTime, safetyDaysObj);
-
-                // Override status with dynamic calculation
-                // Note: Preserve STAGNANT if originally marked (or add stagnant logic here if needed)
-                // For now, we strictly follow the risk map
                 const dynamicStatus = StockService.mapRiskToStatus(riskLevel, stock.status === StockStatus.STAGNANT);
+
+                // --- Stocking Recommendation Logic ---
+                const isStockingEnabled = strat.is_stocking_enabled === 1; // DB TINYINT 1/0
+
+                // Get Config criteria (Defaults: 3 months, 10 freq, 3 customers)
+                const period = strat.stocking_period || 3;
+                const minFreq = strat.min_outbound_freq || 10;
+                const minCust = strat.min_customer_count || 3;
+
+                // Calculate Metrics
+                const history = stockingSalesMap.get(stock.sku) || [];
+                const cutoffDate = new Date();
+                cutoffDate.setMonth(cutoffDate.getMonth() - period);
+
+                // Filter rows within period
+                const relevantRows = history.filter(r => new Date(r.outbound_date) >= cutoffDate);
+
+                // Aggregate Distinct
+                const uniqueOrders = new Set(relevantRows.map(r => r.outbound_id)).size;
+                const uniqueCustomers = new Set(relevantRows.map(r => r.customer_name)).size;
+
+                const stockingRecommendation = uniqueOrders >= minFreq && uniqueCustomers >= minCust;
+
+                // --- Dead Stock Logic (Backend Logic) ---
+                const deadStockThreshold = strat.dead_stock_days || 180;
+                // Find latest outbound date from history (24 months)
+                let lastOutboundStr = null;
+                if (history && history.length > 0) {
+                    // Sort descending to find latest
+                    history.sort((a, b) => new Date(b.outbound_date).getTime() - new Date(a.outbound_date).getTime());
+                    lastOutboundStr = history[0].outbound_date;
+                }
+
+                const daysSinceOutbound = lastOutboundStr
+                    ? (new Date().getTime() - new Date(lastOutboundStr).getTime()) / (1000 * 3600 * 24)
+                    : 9999; // Treat no record as very old
+
+                // Dead Stock = Stock > 0 AND No Move > Threshold
+                const isDeadStock = stock.inStock > 0 && daysSinceOutbound > deadStockThreshold;
 
                 return {
                     ...stock,
                     status: dynamicStatus,
-                    // Optional: Return debug info if needed
-                    // _debug: { turnoverDays, leadTime, riskLevel }
+                    isStockingEnabled,
+                    stockingRecommendation,
+                    isDeadStock // Expose to frontend
                 };
             });
 
@@ -150,13 +199,34 @@ export class StockController {
                 const sku = stockData.sku;
 
                 // 1. Initialize Product Strategy (Default: Safety Stock 0.6 month, MOM)
+                // 1. Initialize Product Strategy with Global Defaults
+                // Fetch defaults or use hardcoded fallback
+                const [rows] = await pool.execute<RowDataPacket[]>(
+                    "SELECT setting_value FROM system_settings WHERE setting_key = 'stock_global_defaults'"
+                );
+                const defaults = (rows.length > 0 && rows[0].setting_value) ? rows[0].setting_value : {
+                    safety_stock_days: 1,
+                    is_stocking_enabled: false,
+                    stocking_period: 3,
+                    min_outbound_freq: 10,
+                    min_customer_count: 3,
+                    dead_stock_days: 180,
+                    buffer_days: 30
+                };
+
                 await StrategyModel.upsert({
                     sku,
-                    safety_stock_days: 1, // Default 1 month
+                    safety_stock_days: defaults.safety_stock_days || 1, // Default 1 month
                     rop: 0,
                     eoq: 0,
                     benchmark_type: 'mom',
-                    service_level: 0.95
+                    service_level: 0.95,
+                    stocking_period: defaults.stocking_period || 3,
+                    min_outbound_freq: defaults.min_outbound_freq || 10,
+                    min_customer_count: defaults.min_customer_count || 3,
+                    is_stocking_enabled: defaults.is_stocking_enabled || false,
+                    dead_stock_days: defaults.dead_stock_days || 180,
+                    buffer_days: defaults.buffer_days || 30
                 });
 
                 // 2. Initialize Default Supplier (Shenmu Supplier)
@@ -195,6 +265,72 @@ export class StockController {
                 return res.status(409).json({ message: 'Product with this SKU already exists' });
             }
             res.status(500).json({ message: 'Failed to create product' });
+        }
+    }
+
+    static async getStockingStats(req: Request, res: Response) {
+        try {
+            const { sku } = req.params;
+            const period = Number(req.query.period) || 3;
+
+            // Date filtering Logic corresponding to Frontend Cutoff
+            const sql = `
+                SELECT outbound_id, customer_name
+                FROM shiplist
+                WHERE product_model = ? 
+                AND outbound_date >= DATE_SUB(CURDATE(), INTERVAL ? MONTH)
+            `;
+
+            const [rows] = await pool.execute<RowDataPacket[]>(sql, [sku, period]);
+
+            const uniqueOrders = new Set(rows.map(r => r.outbound_id)).size;
+            const uniqueCustomers = new Set(rows.map(r => r.customer_name)).size;
+
+            res.json({
+                outboundCount: uniqueOrders,
+                distinctCustomerCount: uniqueCustomers,
+                period
+            });
+        } catch (error) {
+            console.error('Error fetching stocking stats:', error);
+            res.status(500).json({ message: 'Failed to fetch stocking stats' });
+        }
+    }
+
+    static async getStockDefaults(req: Request, res: Response) {
+        try {
+            const [rows] = await pool.execute<RowDataPacket[]>(
+                "SELECT setting_value FROM system_settings WHERE setting_key = 'stock_global_defaults'"
+            );
+
+            const defaults = (rows.length > 0 && rows[0].setting_value) ? rows[0].setting_value : {
+                stocking_period: 3,
+                min_outbound_freq: 10,
+                min_customer_count: 3,
+                safety_stock_days: 1,
+                dead_stock_days: 180,
+                is_stocking_enabled: false,
+                buffer_days: 30,
+                lead_time_economic: 30
+            };
+            res.json(defaults);
+        } catch (error) {
+            console.error('Error fetching stock defaults:', error);
+            res.status(500).json({ message: 'Failed to fetch defaults' });
+        }
+    }
+
+    static async saveStockDefaults(req: Request, res: Response) {
+        try {
+            const defaults = req.body;
+            await pool.execute(
+                "INSERT INTO system_settings (setting_key, setting_value) VALUES ('stock_global_defaults', ?) ON DUPLICATE KEY UPDATE setting_value = ?",
+                [JSON.stringify(defaults), JSON.stringify(defaults)]
+            );
+            res.json({ message: 'Defaults saved successfully' });
+        } catch (error) {
+            console.error('Error saving stock defaults:', error);
+            res.status(500).json({ message: 'Failed to save defaults' });
         }
     }
 }

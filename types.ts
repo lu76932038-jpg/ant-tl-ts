@@ -81,6 +81,9 @@ export interface Product {
   inStock: number;
   available: number;
   inTransit: number;
+  isStockingEnabled: boolean;
+  stockingRecommendation: boolean;
+  isDeadStock?: boolean;
 }
 
 export interface FilterStats {

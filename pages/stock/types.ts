@@ -5,6 +5,7 @@ export interface KPI {
     sales30Days: number;
     forecast30Days?: number;
     inventoryValue?: number;
+    distinctCustomerCount?: number; // 新增：去重后的总客户数
     valuationDetails?: {
         date: string;
         qty: number;
@@ -29,9 +30,11 @@ export interface ChartData {
     type: string;
     actualQty?: number;
     actualAmount?: number;
+    actualOrderCount?: number; // 新增：出库项次(单据数)
     actualCustomerCount?: number;
     forecastQty?: number;
     forecastAmount?: number;
+    forecastOrderCount?: number; // 新增：预测项次
     forecastCustomerCount?: number;
     forecastRemainder?: number; // Added this one as it was used in calculation
     inbound?: number;
@@ -72,6 +75,11 @@ export interface StrategyConfig {
 
     // V3.0.1 任务48: 数据权限白名单 (User IDs)
     authorized_viewer_ids?: number[];
+
+    // V3.0.1 Task 59
+    stocking_strategy_period?: number;
+    min_outbound_freq?: number;
+    min_customer_count?: number;
 }
 
 export interface PriceTier {

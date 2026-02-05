@@ -11,6 +11,7 @@ export interface User {
     raw_password?: string;
     role: 'user' | 'admin';
     permissions: string[];
+    avatar?: string | null;
     created_at: Date;
     updated_at: Date;
     last_login: Date | null;
@@ -236,6 +237,16 @@ export class UserModel {
                 await pool.execute(
                     "UPDATE users SET raw_password = 'admin123' WHERE username = 'admin' AND raw_password IS NULL"
                 );
+
+                // Check for 'avatar' column
+                const [avatarColumns] = await pool.execute<RowDataPacket[]>(
+                    "SHOW COLUMNS FROM users LIKE 'avatar'"
+                );
+                if (avatarColumns.length === 0) {
+                    await pool.execute(
+                        "ALTER TABLE users ADD COLUMN avatar VARCHAR(255) DEFAULT NULL AFTER raw_password"
+                    );
+                }
             }
         } catch (error) {
             console.error('Error initializing users table:', error);
