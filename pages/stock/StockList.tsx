@@ -21,6 +21,8 @@ const StockList: React.FC = () => {
     const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
     const [isShipModalOpen, setIsShipModalOpen] = useState(false);
     const [selectedProductForShip, setSelectedProductForShip] = useState<Product | null>(null);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editValue, setEditValue] = useState<string>('');
 
     const fetchStocks = async () => {
         try {
@@ -70,6 +72,24 @@ const StockList: React.FC = () => {
     useMemo(() => {
         fetchStocks();
     }, []);
+
+    const handleUpdateInStock = async (product: Product, newValue: string) => {
+        const val = parseInt(newValue);
+        if (isNaN(val) || val === product.inStock) {
+            setEditingId(null);
+            return;
+        }
+
+        try {
+            await api.patch(`/stocks/${product.id}`, { inStock: val });
+            setProducts(prev => prev.map(p => p.id === product.id ? { ...p, inStock: val } : p));
+        } catch (error) {
+            console.error('Update inStock failed:', error);
+            alert('修改库存失败');
+        } finally {
+            setEditingId(null);
+        }
+    };
 
     const filteredProducts = useMemo(() => {
         const filtered = products.filter(product => {
@@ -272,7 +292,31 @@ const StockList: React.FC = () => {
                                                     <StatusBadge status={product.status as StockStatus} />
                                                 </td>
                                                 <td className="py-3 px-6 text-right text-base font-bold text-gray-900 tabular-nums">
-                                                    {product.inStock}
+                                                    {editingId === product.id ? (
+                                                        <input
+                                                            autoFocus
+                                                            type="number"
+                                                            value={editValue}
+                                                            onChange={(e) => setEditValue(e.target.value)}
+                                                            onBlur={() => handleUpdateInStock(product, editValue)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') handleUpdateInStock(product, editValue);
+                                                                if (e.key === 'Escape') setEditingId(null);
+                                                            }}
+                                                            className="w-20 px-2 py-1 text-right border border-blue-500 rounded focus:outline-none bg-blue-50"
+                                                        />
+                                                    ) : (
+                                                        <div
+                                                            className="cursor-pointer hover:text-blue-600 transition-colors"
+                                                            onDoubleClick={() => {
+                                                                setEditingId(product.id);
+                                                                setEditValue(product.inStock.toString());
+                                                            }}
+                                                            title="双击修改"
+                                                        >
+                                                            {product.inStock}
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="py-3 px-6 text-right text-[15px] text-gray-400 tabular-nums">
                                                     {product.available}

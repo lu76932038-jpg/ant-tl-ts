@@ -10,5 +10,6 @@ router.get('/:sku/stocking-stats', authenticate, StockController.getStockingStat
 router.post('/initialize', StockController.initialize);
 router.get('/settings/stock-defaults', authenticate, StockController.getStockDefaults);
 router.post('/settings/stock-defaults', authenticate, StockController.saveStockDefaults);
+router.patch('/:id', authenticate, StockController.updateStock);
 
 export default router;

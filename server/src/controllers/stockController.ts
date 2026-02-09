@@ -333,4 +333,21 @@ export class StockController {
             res.status(500).json({ message: 'Failed to save defaults' });
         }
     }
+
+    static async updateStock(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const updateData = req.body;
+
+            if (!id) {
+                return res.status(400).json({ message: 'ID is required' });
+            }
+
+            await StockModel.update(Number(id), updateData);
+            res.json({ message: 'Stock updated successfully' });
+        } catch (error) {
+            console.error('Error updating stock:', error);
+            res.status(500).json({ message: 'Failed to update stock' });
+        }
+    }
 }

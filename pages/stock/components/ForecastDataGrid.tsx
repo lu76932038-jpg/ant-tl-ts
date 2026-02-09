@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ChevronDown, Calendar, Clock, BarChart3, TrendingUp, Download, ChevronUp, AlertCircle, Copy, Check, Snowflake, Sun, Leaf, Wind } from 'lucide-react';
 import { getISOWeek } from 'date-fns';
 import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
+
 import { ChartData } from '../types';
 import { SmartTooltip } from './SmartTooltip';
 
@@ -330,13 +330,19 @@ const ForecastDataGrid: React.FC<ForecastDataGridProps> = ({
                 .filter(Boolean)
                 .join(" + ");
 
-            // Loop Days and Compare at Day Level
-            const todayStr = new Date().toISOString().split('T')[0];
+            const toLocalDateString = (date: Date) => {
+                const y = date.getFullYear();
+                const m = String(date.getMonth() + 1).padStart(2, '0');
+                const d = String(date.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            };
+
+            const todayStr = toLocalDateString(new Date());
 
             const days = dailyWeights.map(d => {
                 const dayActual = Math.round(dailyBaseActual * d.weight);
                 const dayForecast = Math.round(dailyBaseForecast * d.weight);
-                const dateStr = d.date.toISOString().split('T')[0];
+                const dateStr = toLocalDateString(d.date);
 
                 // Date-Based Logic
                 let val, source;
@@ -494,7 +500,15 @@ const ForecastDataGrid: React.FC<ForecastDataGridProps> = ({
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(monthlyRows), "月汇总");
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(yearlyRows), "年总览");
 
-        saveAs(new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/octet-stream' }), `销售明细_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        const blob = new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `销售明细_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     };
 
     // --- Rendering Helpers ---

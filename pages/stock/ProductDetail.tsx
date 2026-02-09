@@ -1186,6 +1186,8 @@ const ProductDetail: React.FC = () => {
                                 autoReplenishmentTime={autoReplenishmentTime}
                                 setAutoReplenishmentTime={setAutoReplenishmentTime}
                                 isStockingEnabled={isStockingEnabled}
+                                dailyActuals={data?.kpi?.dailyActuals}
+                                dayOfWeekFactors={dayOfWeekFactors}
                             />
 
                             {/* 2. Supplier Card */}

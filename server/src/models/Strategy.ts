@@ -38,6 +38,7 @@ export interface ProductStrategy {
     calculated_forecasts?: any; // JSON Record<string, number>
     supplier_info?: any; // JSON { name, code, price, lead_time_tiers, etc }
     replenishment_mode?: 'fast' | 'economic'; // ADDED
+    replenishment_sales_cycle?: number; // ADDED
     updated_at?: Date;
 }
 
@@ -77,6 +78,7 @@ export class StrategyModel {
                     calculated_forecasts JSON DEFAULT NULL,
                     supplier_info JSON DEFAULT NULL,
                     replenishment_mode VARCHAR(20) DEFAULT 'economic',
+                    replenishment_sales_cycle DECIMAL(10, 2) DEFAULT 1,
                     auto_replenishment BOOLEAN DEFAULT FALSE,
                     auto_replenishment_time VARCHAR(10) DEFAULT NULL,
                     dead_stock_days INT DEFAULT 180,
@@ -114,6 +116,7 @@ export class StrategyModel {
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN calculated_forecasts JSON DEFAULT NULL");
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN supplier_info JSON DEFAULT NULL");
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN replenishment_mode VARCHAR(20) DEFAULT 'economic'");
+            await alterIgnore("ALTER TABLE product_strategies ADD COLUMN replenishment_sales_cycle DECIMAL(10, 2) DEFAULT 1");
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN auto_replenishment BOOLEAN DEFAULT FALSE");
             await alterIgnore("ALTER TABLE product_strategies ADD COLUMN auto_replenishment_time VARCHAR(10) DEFAULT NULL");
             // V3.0.1 New Columns
@@ -165,7 +168,8 @@ export class StrategyModel {
             benchmark_type, mom_range, mom_time_sliders, mom_weight_sliders, yoy_range, yoy_weight_sliders, ratio_adjustment,
             forecast_overrides, calculated_forecasts, supplier_info, replenishment_mode,
             dead_stock_days, is_stocking_enabled, authorized_viewer_ids,
-            stocking_period, min_outbound_freq, min_customer_count, buffer_days
+            stocking_period, min_outbound_freq, min_customer_count, buffer_days,
+            replenishment_sales_cycle
         } = strategy;
 
         await pool.execute(
@@ -176,9 +180,10 @@ export class StrategyModel {
                 forecast_overrides, calculated_forecasts, supplier_info, replenishment_mode,
                 auto_replenishment, auto_replenishment_time,
                 dead_stock_days, is_stocking_enabled, authorized_viewer_ids,
-                stocking_period, min_outbound_freq, min_customer_count, buffer_days
+                stocking_period, min_outbound_freq, min_customer_count, buffer_days,
+                replenishment_sales_cycle
             )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                 start_year_month = VALUES(start_year_month),
                 forecast_cycle = VALUES(forecast_cycle),
@@ -206,7 +211,8 @@ export class StrategyModel {
                 stocking_period = VALUES(stocking_period),
                 min_outbound_freq = VALUES(min_outbound_freq),
                 min_customer_count = VALUES(min_customer_count),
-                buffer_days = VALUES(buffer_days)
+                buffer_days = VALUES(buffer_days),
+                replenishment_sales_cycle = VALUES(replenishment_sales_cycle)
             `,
             [
                 sku, start_year_month || null, forecast_cycle || 6, forecast_year_month || null,
@@ -227,7 +233,8 @@ export class StrategyModel {
                 strategy.stocking_period ?? 3,
                 strategy.min_outbound_freq ?? 10,
                 strategy.min_customer_count ?? 3,
-                strategy.buffer_days ?? 30
+                strategy.buffer_days ?? 30,
+                replenishment_sales_cycle ?? 1
             ]
         );
     }

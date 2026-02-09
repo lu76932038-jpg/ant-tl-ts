@@ -14,6 +14,7 @@ export interface KPI {
     }[];
     turnoverDays: number;
     stockoutRisk: string;
+    backlog_qty?: number; // 新增：积压欠单数量 (V3.0.1)
     inTransitBatches?: {
         id: string;
         arrival_date: string;

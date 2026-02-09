@@ -83,22 +83,39 @@ export class SchedulerService {
 
             const dailySales = monthlyForecast / 30;
             const leadTime = (strategy.replenishment_mode === 'fast' ? 7 : 30);
-            const dynamicSafetyStock = dailySales * 30 * strategy.safety_stock_days;
-            const dynamicRop = dynamicSafetyStock + (dailySales * leadTime);
+
+            // 1. 触发点 (ROP) = 最小销售周期 (SS) + 货期需求 (LT)
+            const safetyDays = strategy.safety_stock_days * 30;
+            const ropThreshold = dailySales * (safetyDays + leadTime);
+
+            // 2. 补货目标水位 = 动态配置的补货销售周期需求
+            const replenishmentCycleMonths = strategy.replenishment_sales_cycle || 1;
+            const targetCycleDays = replenishmentCycleMonths * 30;
+            const targetDemand = dailySales * targetCycleDays;
+
+            // 3. 积压欠单
+            const backlogQty = (strategy as any).backlog_qty || 0;
 
             const effectiveStock = inStock + inTransitEntries;
 
-            // 5. Check Trigger
-            if (effectiveStock < dynamicRop && monthlyForecast > 0) {
-                // Trigger!
-                // Calculate Target Level (ROP + 15days Buffer or 1.5x ROP)
-                const targetLevel = Math.max(dynamicRop * 1.5, dynamicRop + (dailySales * 15));
-                let needed = targetLevel - effectiveStock;
-                let orderQty = Math.max(needed, strategy.eoq || 0);
-                orderQty = Math.ceil(orderQty / 100) * 100; // Round to 100
+            // 4. 检查触发逻辑 (当前有效库存 < ROP + 积压欠单)
+            const triggerThreshold = ropThreshold + backlogQty;
+
+            if (effectiveStock < triggerThreshold && monthlyForecast > 0) {
+                // 建议补货量 = (补货点 + 补货销售周期需求 + 积压欠单) - 有效库存
+                // 叠加模式确保补货后库存能支撑过触发线并覆盖一个完整周期
+                let rawNeeded = (ropThreshold + targetDemand + backlogQty) - effectiveStock;
+
+                let orderQty = Math.max(rawNeeded, strategy.eoq || 0);
+
+                // 向上取整到100 (保持原有业务约束)
+                orderQty = Math.ceil(orderQty / 100) * 100;
+
+                console.log(`[自动补货] 触发! SKU: ${sku}, 当前拥有: ${effectiveStock}, 触发临界(ROP+欠单): ${Math.round(triggerThreshold)}`);
+                console.log(`[自动补货] 叠加式补货量: ${orderQty} (基于补货点+${replenishmentCycleMonths}月需求)`);
 
                 if (orderQty > 0) {
-                    // Create PO -> Now Plan
+                    // 创建采购计划
                     let supplierInfo: any = {};
                     try {
                         supplierInfo = strategy.supplier_info ?
@@ -185,7 +202,7 @@ export class SchedulerService {
                     await StrategyModel.addLog({
                         sku,
                         action_type: 'AUTO_REPLENISHMENT',
-                        content: `自动补货触发: 有效库存(${effectiveStock}) < ROP(${Math.round(dynamicRop)}). 生成采购单草稿: ${orderQty}件`,
+                        content: `自动补货触发: 有效库存(${effectiveStock}) < 补货点(${Math.round(ropThreshold)}). 生成采购单草稿: ${orderQty}件`,
                         status: 'AUTO_APPROVED'
                     });
                 }

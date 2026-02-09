@@ -327,7 +327,13 @@ const ForecastConfig: React.FC<ForecastConfigProps> = ({
                                     ].map(y => (
                                         <button
                                             key={y.val}
-                                            onClick={() => isEditing && setDraftYoyRange(y.val as any)}
+                                            onClick={() => {
+                                                if (!isEditing) return;
+                                                setDraftYoyRange(y.val as any);
+                                                // Reset weights when switching to ensure correct array length
+                                                if (y.val === 2) setDraftYoyWeight([50]);
+                                                if (y.val === 3) setDraftYoyWeight([33, 66]);
+                                            }}
                                             className={`flex items-center justify-center py-1 px-1 rounded-md transition-all duration-200 text-[10px] font-bold
                                                 ${draftYoyRange === y.val
                                                     ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-black/5'

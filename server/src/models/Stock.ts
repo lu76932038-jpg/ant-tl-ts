@@ -65,6 +65,19 @@ export class StockModel {
         return result.insertId;
     }
 
+    static async update(id: number, data: Partial<Stock>): Promise<void> {
+        const entries = Object.entries(data).filter(([key]) => key !== 'id');
+        if (entries.length === 0) return;
+
+        const fields = entries.map(([key]) => `${key} = ?`).join(', ');
+        const values = entries.map(([, value]) => value);
+
+        await pool.execute(
+            `UPDATE StockList SET ${fields} WHERE id = ?`,
+            [...values, id]
+        );
+    }
+
     static async initializeTable(mockData: any[]): Promise<void> {
         try {
             const [tables] = await pool.execute<RowDataPacket[]>(
