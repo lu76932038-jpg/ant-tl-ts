@@ -25,7 +25,8 @@ import {
     PanelLeftOpen,
     BookOpen,
     Layers,
-    MessageSquarePlus
+    MessageSquarePlus,
+    Database
 } from 'lucide-react';
 import Logo from '../components/Logo';
 
@@ -93,6 +94,13 @@ const SidebarLayout: React.FC = () => {
                         { label: '操作指引', path: '/stock/help', icon: <BookOpen className="w-4 h-4" /> },
                     ]
                 },
+                {
+                    label: '客户管理',
+                    icon: <Users className="w-4 h-4" />,
+                    children: [
+                        { label: '客户列表', path: '/customer/list', icon: <ClipboardList className="w-4 h-4" />, roles: ['user', 'admin'] }
+                    ]
+                },
                 { label: '高铁发票助手', path: '/train-invoice', icon: <Train className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'train_invoice' }
             ]
         },
@@ -109,6 +117,16 @@ const SidebarLayout: React.FC = () => {
             icon: <Settings className="w-5 h-5 text-slate-400" />,
             children: [
                 { label: '用户管理', path: '/users', icon: <Users className="w-4 h-4" />, roles: ['admin'] },
+                {
+                    label: '数据同步',
+                    icon: <History className="w-4 h-4" />,
+                    roles: ['admin'],
+                    children: [
+                        { label: '出库数据同步', path: '/system/data-sync/outbound', icon: <Truck className="w-4 h-4" />, roles: ['admin'] },
+                        { label: '库存数据同步', path: '/system/data-sync/inventory', icon: <Database className="w-4 h-4" />, roles: ['admin'] },
+                        { label: '入库数据同步', path: '/system/data-sync/inbound', icon: <Database className="w-4 h-4" />, roles: ['admin'] }
+                    ]
+                },
                 { label: '登录日志', path: '/login-logs', icon: <History className="w-4 h-4" />, roles: ['admin'] }
             ]
         }

@@ -14,6 +14,7 @@ interface EntryRecord {
     purchase_date?: string;
     quantity: number;
     supplier: string;
+    warehouse?: string;
     unit_price: number;
     status: 'PENDING' | 'RECEIVED';
 }
@@ -98,6 +99,7 @@ const EntryList: React.FC = () => {
                                         <th className="py-5 px-6 text-[13px] font-medium text-gray-400">预计到达</th>
                                         <th className="py-5 px-6 text-[13px] font-medium text-gray-400 text-right">入库数量</th>
                                         <th className="py-5 px-6 text-[13px] font-medium text-gray-400 text-right">采购单价</th>
+                                        <th className="py-5 px-6 text-[13px] font-medium text-gray-400">仓库</th>
                                         <th className="py-5 px-6 text-[13px] font-medium text-gray-400">供应商</th>
                                         <th className="py-5 px-6 text-[13px] font-medium text-gray-400">状态</th>
                                     </tr>
@@ -120,6 +122,7 @@ const EntryList: React.FC = () => {
                                                 <td className="py-5 px-6 text-sm text-gray-500">{new Date(record.arrival_date).toLocaleDateString()}</td>
                                                 <td className="py-5 px-6 text-right text-base font-bold text-gray-900">{record.quantity}</td>
                                                 <td className="py-5 px-6 text-right text-sm font-medium text-gray-900">¥ {Number(record.unit_price).toFixed(2)}</td>
+                                                <td className="py-5 px-6 text-sm text-gray-600">{record.warehouse || '-'}</td>
                                                 <td className="py-5 px-6 text-sm text-gray-600">{record.supplier}</td>
                                                 <td className="py-5 px-6">
                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${record.status === 'RECEIVED' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'

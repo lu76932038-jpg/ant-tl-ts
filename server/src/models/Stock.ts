@@ -18,6 +18,8 @@ export interface Stock {
     available: number;
     inTransit: number;
     unit?: string;
+    warehouse?: string;
+    product_type?: string;
     created_at?: Date;
     updated_at?: Date;
 }
@@ -59,8 +61,18 @@ export class StockModel {
 
     static async create(stock: Omit<Stock, 'id'>): Promise<number> {
         const [result] = await pool.execute<ResultSetHeader>(
-            'INSERT INTO StockList (sku, name, status, inStock, available, inTransit, unit) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [stock.sku, stock.name, stock.status, stock.inStock, stock.available, stock.inTransit, stock.unit || '个']
+            'INSERT INTO StockList (sku, name, status, inStock, available, inTransit, unit, warehouse, product_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [
+                stock.sku,
+                stock.name,
+                stock.status,
+                stock.inStock,
+                stock.available,
+                stock.inTransit,
+                stock.unit || '个',
+                stock.warehouse || null,
+                stock.product_type || null
+            ]
         );
         return result.insertId;
     }
@@ -95,21 +107,42 @@ export class StockModel {
                         available INT DEFAULT 0,
                         inTransit INT DEFAULT 0,
                         unit VARCHAR(20) DEFAULT '个',
+                        warehouse VARCHAR(50),
+                        product_type VARCHAR(100),
+                        is_stocking_recommended BOOLEAN DEFAULT FALSE,
+                        is_stocking_enabled BOOLEAN DEFAULT FALSE,
+                        is_dead_stock BOOLEAN DEFAULT FALSE,
+                        risk_status VARCHAR(20) DEFAULT 'HEALTHY',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                     )
                 `);
                 console.log('StockList table created successfully');
             } else {
-                // Migration: Check and add 'unit' column if missing
+                // Migration: Check and set columns if missing
                 try {
                     await pool.execute("ALTER TABLE StockList ADD COLUMN unit VARCHAR(20) DEFAULT '个'");
-                    console.log('Added column unit to StockList');
-                } catch (e: any) {
-                    if (e.code !== 'ER_DUP_FIELDNAME') {
-                        // console.error('Migration note:', e.message);
-                    }
-                }
+                } catch (e: any) { if (e.code !== 'ER_DUP_FIELDNAME') { /* ignore */ } }
+
+                try {
+                    await pool.execute("ALTER TABLE StockList ADD COLUMN warehouse VARCHAR(50)");
+                    console.log('Added column warehouse to StockList');
+                } catch (e: any) { if (e.code !== 'ER_DUP_FIELDNAME') { /* ignore */ } }
+
+                try {
+                    await pool.execute("ALTER TABLE StockList ADD COLUMN product_type VARCHAR(100)");
+                    console.log('Added column product_type to StockList');
+                    await pool.execute("ALTER TABLE StockList ADD COLUMN product_type VARCHAR(100)");
+                    console.log('Added column product_type to StockList');
+                } catch (e: any) { if (e.code !== 'ER_DUP_FIELDNAME') { /* ignore */ } }
+
+                try {
+                    await pool.execute("ALTER TABLE StockList ADD COLUMN is_stocking_recommended BOOLEAN DEFAULT FALSE");
+                    await pool.execute("ALTER TABLE StockList ADD COLUMN is_stocking_enabled BOOLEAN DEFAULT FALSE");
+                    await pool.execute("ALTER TABLE StockList ADD COLUMN is_dead_stock BOOLEAN DEFAULT FALSE");
+                    await pool.execute("ALTER TABLE StockList ADD COLUMN risk_status VARCHAR(20) DEFAULT 'HEALTHY'");
+                    console.log('Added persistence columns to StockList');
+                } catch (e: any) { if (e.code !== 'ER_DUP_FIELDNAME') { /* ignore */ } }
             }
 
             // 检查当前数据量

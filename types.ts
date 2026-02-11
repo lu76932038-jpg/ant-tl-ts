@@ -84,6 +84,8 @@ export interface Product {
   isStockingEnabled: boolean;
   stockingRecommendation: boolean;
   isDeadStock?: boolean;
+  warehouse?: string;
+  product_type?: string;
 }
 
 export interface FilterStats {

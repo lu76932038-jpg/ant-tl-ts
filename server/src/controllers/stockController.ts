@@ -9,164 +9,68 @@ import { SupplierStrategyModel } from '../models/SupplierStrategy';
 export class StockController {
     static async getAllStocks(req: Request, res: Response) {
         try {
-            // 1. Parallel Fetching of all necessary data
-            // 1. Parallel Fetching of all necessary data
-            const [
-                stocks,
-                salesRows,
-                strategyRows,
-                supplierRows,
-                stockingSalesRows // New: Fetch data for stocking logic
-            ] = await Promise.all([
-                StockModel.findAll(),
-                // Sales 30 Days (Keep for turnover calculation)
-                pool.execute<RowDataPacket[]>(`
-                    SELECT product_model, SUM(quantity) as qty 
-                    FROM shiplist 
-                    WHERE outbound_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
-                    GROUP BY product_model
-                `).then(res => res[0]),
-                // Safety Stock & Permissions & Stocking Config
-                pool.execute<RowDataPacket[]>(`
-                    SELECT 
-                        sku, 
-                        safety_stock_days, 
-                        authorized_viewer_ids,
-                        is_stocking_enabled,
-                        stocking_period,
-                        min_outbound_freq,
-                        min_customer_count,
-                        dead_stock_days
-                    FROM product_strategies
-                `).then(res => res[0]),
-                // Supplier Lead Times
-                pool.execute<RowDataPacket[]>(`
-                    SELECT 
-                        pss.sku,
-                        COALESCE(spt.lead_time_days, pss.lead_time_economic, 30) as effective_lead_time
-                    FROM product_supplier_strategies pss
-                    LEFT JOIN supplier_price_tiers spt 
-                        ON pss.id = spt.strategy_id AND spt.is_selected = 1
-                    WHERE pss.is_default = 1
-                `).then(res => res[0]),
-                // Sales History for Stocking Rec (Last 24 Months)
-                // We need raw data to calculate distincts over dynamic periods per product
-                pool.execute<RowDataPacket[]>(`
-                    SELECT product_model, outbound_date, outbound_id, customer_name
-                    FROM shiplist 
-                    WHERE outbound_date >= DATE_SUB(CURDATE(), INTERVAL 24 MONTH)
-                `).then(res => res[0])
-            ]);
+            const page = parseInt(req.query.page as string) || 1;
+            const pageSize = parseInt(req.query.pageSize as string) || 15;
+            const status = req.query.status as string; // 'CRITICAL', 'WARNING', etc.
+            const search = req.query.search as string;
 
-            // 1.1 Permission Filtering Logic
-            const user = (req as any).user;
-            const userId = user?.id; // Assuming number
-            const userRole = user?.role; // 'admin' | 'user'
+            const offset = (page - 1) * pageSize;
 
-            // Build Maps
-            const authorizedMap = new Map<string, number[]>();
-            const strategyMap = new Map<string, any>(); // Store full strategy row
+            // Build Query
+            let baseSql = `FROM StockList WHERE 1=1`;
+            const params: any[] = [];
 
-            strategyRows.forEach((row: any) => {
-                strategyMap.set(row.sku, row);
+            if (search) {
+                baseSql += ` AND (sku LIKE ? OR name LIKE ? OR product_type LIKE ?)`;
+                const searchParam = `%${search}%`;
+                params.push(searchParam, searchParam, searchParam);
+            }
 
-                let viewerIds: number[] = [];
-                try {
-                    if (row.authorized_viewer_ids) {
-                        viewerIds = typeof row.authorized_viewer_ids === 'string'
-                            ? JSON.parse(row.authorized_viewer_ids)
-                            : row.authorized_viewer_ids;
-                    }
-                } catch (e) { viewerIds = []; }
-                authorizedMap.set(row.sku, Array.isArray(viewerIds) ? viewerIds : []);
-            });
-
-            // Filter Stocks
-            const visibleStocks = stocks.filter(stock => {
-                if (!userRole || userRole === 'admin') return true;
-                const allowedIds = (authorizedMap.get(stock.sku) || []).map(id => Number(id));
-                return allowedIds.includes(Number(userId));
-            });
-
-            // 2. Build remaining Lookup Maps
-            const salesMap = new Map<string, number>();
-            salesRows.forEach((row: any) => salesMap.set(row.product_model, Number(row.qty)));
-
-            const leadTimeMap = new Map<string, number>();
-            supplierRows.forEach((row: any) => leadTimeMap.set(row.sku, Number(row.effective_lead_time)));
-
-            // Group Stocking Sales Data by Product for fast access
-            const stockingSalesMap = new Map<string, any[]>();
-            (stockingSalesRows as any[]).forEach((row: any) => {
-                if (!stockingSalesMap.has(row.product_model)) {
-                    stockingSalesMap.set(row.product_model, []);
+            if (status && status !== '全部') {
+                // Map frontend '全部' to Check or just ignore
+                // StockStatus.ALL is '全部'
+                if (status !== StockStatus.ALL) {
+                    // Note: We persisted 'risk_status' (HEALTHY/WARNING/CRITICAL/STAGNANT)
+                    // Check if 'STAGNANT' is stored in 'risk_status' or if it relies on 'is_dead_stock'
+                    // In recalculateAll, we mapped riskLevel to StockStatus using mapRiskToStatus which handles STAGNANT.
+                    // So 'status' column in DB (which we updated) should hold the correct Enum string.
+                    // Wait, StockList table element 'status' was already there. We updated IT.
+                    baseSql += ` AND status = ?`;
+                    params.push(status);
                 }
-                stockingSalesMap.get(row.product_model)?.push(row);
+            }
+
+            // Count Total
+            const [countRows] = await pool.query<RowDataPacket[]>(`SELECT COUNT(*) as total ${baseSql}`, params);
+            const total = countRows[0].total;
+
+            // Fetch Page
+            const sql = `
+                SELECT * 
+                ${baseSql}
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+            `;
+
+            // Limit/Offset must be integers, not strings from params
+            const [rows] = await pool.query<RowDataPacket[]>(sql, [...params, pageSize, offset]);
+
+            // Transform for Frontend (renaming columns if needed, but they match mostly)
+            const result = rows.map(row => ({
+                ...row,
+                stockingRecommendation: !!row.is_stocking_recommended, // Convert 0/1 to boolean
+                isStockingEnabled: !!row.is_stocking_enabled,
+                isDeadStock: !!row.is_dead_stock
+            }));
+
+            res.json({
+                items: result,
+                total,
+                page,
+                pageSize,
+                totalPages: Math.ceil(total / pageSize)
             });
 
-            // 3. Dynamic Calculation & Enrichment
-            const enrichedStocks = visibleStocks.map(stock => {
-                const sales30Days = salesMap.get(stock.sku) || 0;
-                const leadTime = leadTimeMap.get(stock.sku) || 30;
-                const strat = strategyMap.get(stock.sku) || {};
-
-                const safetyStockDaysRaw = strat.safety_stock_days;
-                const safetyStockDays = safetyStockDaysRaw !== undefined ? safetyStockDaysRaw : 0.6;
-                const safetyDaysObj = safetyStockDays * 30; // Approx
-
-                const turnoverDays = StockService.calculateTurnoverDays(stock.inStock, sales30Days);
-                const riskLevel = StockService.calculateRiskLevel(turnoverDays, leadTime, safetyDaysObj);
-                const dynamicStatus = StockService.mapRiskToStatus(riskLevel, stock.status === StockStatus.STAGNANT);
-
-                // --- Stocking Recommendation Logic ---
-                const isStockingEnabled = strat.is_stocking_enabled === 1; // DB TINYINT 1/0
-
-                // Get Config criteria (Defaults: 3 months, 10 freq, 3 customers)
-                const period = strat.stocking_period || 3;
-                const minFreq = strat.min_outbound_freq || 10;
-                const minCust = strat.min_customer_count || 3;
-
-                // Calculate Metrics
-                const history = stockingSalesMap.get(stock.sku) || [];
-                const cutoffDate = new Date();
-                cutoffDate.setMonth(cutoffDate.getMonth() - period);
-
-                // Filter rows within period
-                const relevantRows = history.filter(r => new Date(r.outbound_date) >= cutoffDate);
-
-                // Aggregate Distinct
-                const uniqueOrders = new Set(relevantRows.map(r => r.outbound_id)).size;
-                const uniqueCustomers = new Set(relevantRows.map(r => r.customer_name)).size;
-
-                const stockingRecommendation = uniqueOrders >= minFreq && uniqueCustomers >= minCust;
-
-                // --- Dead Stock Logic (Backend Logic) ---
-                const deadStockThreshold = strat.dead_stock_days || 180;
-                // Find latest outbound date from history (24 months)
-                let lastOutboundStr = null;
-                if (history && history.length > 0) {
-                    // Sort descending to find latest
-                    history.sort((a, b) => new Date(b.outbound_date).getTime() - new Date(a.outbound_date).getTime());
-                    lastOutboundStr = history[0].outbound_date;
-                }
-
-                const daysSinceOutbound = lastOutboundStr
-                    ? (new Date().getTime() - new Date(lastOutboundStr).getTime()) / (1000 * 3600 * 24)
-                    : 9999; // Treat no record as very old
-
-                // Dead Stock = Stock > 0 AND No Move > Threshold
-                const isDeadStock = stock.inStock > 0 && daysSinceOutbound > deadStockThreshold;
-
-                return {
-                    ...stock,
-                    status: dynamicStatus,
-                    isStockingEnabled,
-                    stockingRecommendation,
-                    isDeadStock // Expose to frontend
-                };
-            });
-
-            res.json(enrichedStocks);
         } catch (error) {
             console.error('Error fetching stocks:', error);
             res.status(500).json({ message: 'Internal server error' });

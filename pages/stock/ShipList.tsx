@@ -204,6 +204,7 @@ const ShipList: React.FC = () => {
                                 <thead>
                                     <tr className="bg-slate-50/50">
                                         <th className="py-4 px-6 text-[12px] font-bold text-slate-500 uppercase tracking-widest w-[160px]">出库单号</th>
+                                        <th className="py-4 px-6 text-[12px] font-bold text-slate-500 uppercase tracking-widest w-[100px]">仓库</th>
                                         <th className="py-4 px-6 text-[12px] font-bold text-slate-500 uppercase tracking-widest w-[200px]">产品型号</th>
                                         <th className="py-4 px-6 text-[12px] font-bold text-slate-500 uppercase tracking-widest">产品名称</th>
                                         <th className="py-4 px-6 text-[12px] font-bold text-slate-500 uppercase tracking-widest w-[140px]">出库日期</th>
@@ -215,7 +216,7 @@ const ShipList: React.FC = () => {
                                 <tbody className="divide-y divide-slate-50">
                                     {isLoading ? (
                                         <tr>
-                                            <td colSpan={7} className="py-24 text-center">
+                                            <td colSpan={8} className="py-24 text-center">
                                                 <div className="flex flex-col items-center gap-3">
                                                     <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
                                                     <span className="text-sm font-medium text-slate-400">正在为您加载海量数据...</span>
@@ -224,7 +225,7 @@ const ShipList: React.FC = () => {
                                         </tr>
                                     ) : paginatedRecords.length === 0 ? (
                                         <tr>
-                                            <td colSpan={7} className="py-24 text-center">
+                                            <td colSpan={8} className="py-24 text-center">
                                                 <div className="flex flex-col items-center gap-3 grayscale opacity-40">
                                                     <Package size={48} className="text-slate-300" />
                                                     <p className="text-sm font-medium text-slate-400">未找到符合条件的出库记录</p>
@@ -237,6 +238,11 @@ const ShipList: React.FC = () => {
                                                 <td className="py-4 px-6">
                                                     <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-[11px] font-mono font-bold group-hover:bg-white group-hover:shadow-sm border border-transparent group-hover:border-slate-200 transition-all">
                                                         {record.outbound_id || 'N/A'}
+                                                    </span>
+                                                </td>
+                                                <td className="py-4 px-6">
+                                                    <span className="text-sm font-medium text-slate-600">
+                                                        {(record as any).warehouse || '-'}
                                                     </span>
                                                 </td>
                                                 <td className="py-4 px-6">

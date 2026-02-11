@@ -9,8 +9,38 @@ export class SchedulerService {
         // Schedule: Every minute
         cron.schedule('* * * * *', async () => {
             await SchedulerService.runAutoReplenishment();
+            await SchedulerService.runDataSyncSchedule();
         });
         console.log('Scheduler Service initialized (every minute).');
+    }
+
+    static async runDataSyncSchedule() {
+        try {
+            const { DataSyncService } = require('./DataSyncService');
+            const service = new DataSyncService();
+            const config = await service.getConfig();
+
+            if (config && config.schedule) {
+                const now = new Date();
+                const hh = String(now.getHours()).padStart(2, '0');
+                const mm = String(now.getMinutes()).padStart(2, '0');
+                const currentTime = `${hh}:${mm}`;
+
+                let schedules: string[] = [];
+                if (Array.isArray(config.schedule)) {
+                    schedules = config.schedule;
+                } else if (typeof config.schedule === 'string') {
+                    schedules = [config.schedule];
+                }
+
+                if (schedules.includes(currentTime)) {
+                    console.log(`[Scheduler] Triggering Data Sync at ${currentTime}`);
+                    await service.processSync();
+                }
+            }
+        } catch (error) {
+            console.error('[Scheduler] Error running data sync:', error);
+        }
     }
 
     static async runAutoReplenishment() {

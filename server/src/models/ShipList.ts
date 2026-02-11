@@ -6,10 +6,13 @@ export interface ShipList {
     outbound_id: string; // Unique user-facing ID
     product_model: string; // Corresponds to SKU in StockList
     product_name: string;
+    product_type?: string; // New field: Product Type (e.g. 电视, 冰箱)
     outbound_date: string; // Format: YYYY-MM-DD
     quantity: number;
     customer_name: string;
+    customer_code?: string; // New field: Customer Code
     unit_price?: number; // New field: Unit Price (Excl. Tax)
+    warehouse?: string; // New field: Warehouse
     created_at?: Date;
 }
 
@@ -35,8 +38,8 @@ export class ShipListModel {
     static async create(item: Omit<ShipList, 'id' | 'created_at' | 'outbound_id'>): Promise<number> {
         const outboundId = ShipListModel.generateOutboundId();
         const [result] = await pool.execute<ResultSetHeader>(
-            'INSERT INTO shiplist (outbound_id, product_model, product_name, outbound_date, quantity, customer_name, unit_price) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [outboundId, item.product_model, item.product_name, item.outbound_date, item.quantity, item.customer_name, item.unit_price || 0]
+            'INSERT INTO shiplist (outbound_id, product_model, product_name, product_type, outbound_date, quantity, customer_name, customer_code, unit_price, warehouse) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [outboundId, item.product_model, item.product_name, item.product_type || '', item.outbound_date, item.quantity, item.customer_name, item.customer_code || '', item.unit_price || 0, item.warehouse || '']
         );
         return result.insertId;
     }
@@ -53,22 +56,25 @@ export class ShipListModel {
             for (let i = 0; i < items.length; i += BATCH_SIZE) {
                 const batch = items.slice(i, i + BATCH_SIZE);
                 const values: any[] = [];
-                const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
+                const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
 
                 batch.forEach(item => {
                     values.push(
                         item.outbound_id,
                         item.product_model,
                         item.product_name,
+                        item.product_type || '',
                         item.outbound_date,
                         item.quantity,
                         item.customer_name,
-                        item.unit_price || 0
+                        item.customer_code || '',
+                        item.unit_price || 0,
+                        item.warehouse || ''
                     );
                 });
 
                 await connection.execute(
-                    `INSERT INTO shiplist (outbound_id, product_model, product_name, outbound_date, quantity, customer_name, unit_price) VALUES ${placeholders}`,
+                    `INSERT INTO shiplist (outbound_id, product_model, product_name, product_type, outbound_date, quantity, customer_name, customer_code, unit_price, warehouse) VALUES ${placeholders}`,
                     values
                 );
             }
@@ -93,31 +99,37 @@ export class ShipListModel {
             for (let i = 0; i < items.length; i += BATCH_SIZE) {
                 const batch = items.slice(i, i + BATCH_SIZE);
                 const values: any[] = [];
-                const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
+                const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
 
                 batch.forEach(item => {
                     values.push(
                         item.outbound_id,
                         item.product_model,
                         item.product_name,
+                        item.product_type || '',
                         item.outbound_date,
                         item.quantity,
                         item.customer_name,
-                        item.unit_price || 0
+                        item.customer_code || '',
+                        item.unit_price || 0,
+                        item.warehouse || ''
                     );
                 });
 
                 // ON DUPLICATE KEY UPDATE: Update fields if outbound_id matches
                 const sql = `
-                    INSERT INTO shiplist (outbound_id, product_model, product_name, outbound_date, quantity, customer_name, unit_price) 
+                    INSERT INTO shiplist (outbound_id, product_model, product_name, product_type, outbound_date, quantity, customer_name, customer_code, unit_price, warehouse) 
                     VALUES ${placeholders}
                     ON DUPLICATE KEY UPDATE
                         product_model = VALUES(product_model),
                         product_name = VALUES(product_name),
+                        product_type = VALUES(product_type),
                         outbound_date = VALUES(outbound_date),
                         quantity = VALUES(quantity),
                         customer_name = VALUES(customer_name),
-                        unit_price = VALUES(unit_price)
+                        customer_code = VALUES(customer_code),
+                        unit_price = VALUES(unit_price),
+                        warehouse = VALUES(warehouse)
                 `;
 
                 await connection.execute(sql, values);
@@ -140,10 +152,13 @@ export class ShipListModel {
                     outbound_id VARCHAR(50) UNIQUE NOT NULL,
                     product_model VARCHAR(100) NOT NULL,
                     product_name VARCHAR(255) NOT NULL,
+                    product_type VARCHAR(100),
                     outbound_date DATE NOT NULL,
                     quantity INT DEFAULT 1,
                     customer_name VARCHAR(255) NOT NULL,
+                    customer_code VARCHAR(100),
                     unit_price DECIMAL(10, 2) DEFAULT 0.00,
+                    warehouse VARCHAR(50),
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
@@ -153,6 +168,23 @@ export class ShipListModel {
                 // Add unit_price if missing
                 await pool.execute(`ALTER TABLE shiplist ADD COLUMN unit_price DECIMAL(10, 2) DEFAULT 0.00;`);
             } catch (err: any) { if (err.code !== 'ER_DUP_FIELDNAME') console.log('Unit price col exists'); }
+
+            try {
+                // Add warehouse if missing
+                await pool.execute(`ALTER TABLE shiplist ADD COLUMN warehouse VARCHAR(50);`);
+            } catch (err: any) { if (err.code !== 'ER_DUP_FIELDNAME') console.log('Warehouse col exists'); }
+
+            try {
+                // Add customer_code if missing
+                await pool.execute(`ALTER TABLE shiplist ADD COLUMN customer_code VARCHAR(100);`);
+                console.log('Added customer_code column.');
+            } catch (err: any) { if (err.code !== 'ER_DUP_FIELDNAME') console.log('Customer code col exists'); }
+
+            try {
+                // Add product_type if missing
+                await pool.execute(`ALTER TABLE shiplist ADD COLUMN product_type VARCHAR(100);`);
+                console.log('Added product_type column.');
+            } catch (err: any) { if (err.code !== 'ER_DUP_FIELDNAME') console.log('Product type col exists'); }
 
             try {
                 // Add outbound_id if missing

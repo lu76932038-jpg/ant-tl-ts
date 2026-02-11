@@ -24,17 +24,25 @@ const StockList: React.FC = () => {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editValue, setEditValue] = useState<string>('');
 
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalItems, setTotalItems] = useState(0);
+
     const fetchStocks = async () => {
         try {
-            let data: any = await api.get('/stocks');
+            setIsLoading(true);
+            const params = new URLSearchParams({
+                page: currentPage.toString(),
+                pageSize: pageSize.toString(),
+                status: activeFilter,
+                search: searchTerm
+            });
 
-            // 如果数据库没数据，则尝试初始化 (基于 MOCK 数据)
-            if (data.length === 0) {
-                await api.post('/stocks/initialize', { mockData: MOCK_PRODUCTS });
-                data = await api.get('/stocks');
-            }
+            const response: any = await api.get(`/stocks?${params.toString()}`);
 
-            setProducts(data);
+            setProducts(response.items || []);
+            setTotalItems(response.total || 0);
+            setTotalPages(response.totalPages || 1);
+
         } catch (error) {
             console.error('Failed to fetch stocks:', error);
         } finally {
@@ -42,15 +50,56 @@ const StockList: React.FC = () => {
         }
     };
 
-    const handleAddProduct = async (newProduct: Omit<Product, 'id'>) => {
-        try {
-            await api.post('/stocks', newProduct);
-            // Refresh list
+    // removed client-side filteredProducts memo since we do it server-side now
+
+    // Trigger fetch when dependency changes
+    React.useEffect(() => {
+        fetchStocks();
+    }, [currentPage, pageSize, activeFilter]); // removed searchTerm to avoid debouncing issues for now, or add debounce
+
+    // For Search, we might want a debounce or manual trigger
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            setCurrentPage(1); // Reset to page 1 on search
             fetchStocks();
-        } catch (error) {
-            console.error('Error adding product:', error);
-            alert('添加商品失败');
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [searchTerm]);
+
+    // Manual Refresh
+    // const handleRefresh = fetchStocks;
+
+    const handleUpdateInStock = async (product: Product, value: string) => {
+        const newValue = parseInt(value, 10);
+        if (isNaN(newValue) || newValue < 0) {
+            // alert('请输入有效的库存数量');
+            setEditingId(null);
+            return;
         }
+
+        if (newValue === product.inStock) {
+            setEditingId(null);
+            return;
+        }
+
+        try {
+            // Assuming PUT for update
+            await api.put(`/stocks/${product.id}`, { inStock: newValue });
+
+            // Optimistic update
+            setProducts(prev => prev.map(p =>
+                p.id === product.id ? { ...p, inStock: newValue } : p
+            ));
+            setEditingId(null);
+        } catch (error) {
+            console.error('Failed to update stock:', error);
+            // Revert changes if needed or just alert
+        }
+    };
+
+    const handleAddProduct = () => {
+        fetchStocks();
+        setIsAddModalOpen(false);
     };
 
     const openShipModal = (product: Product) => {
@@ -58,55 +107,17 @@ const StockList: React.FC = () => {
         setIsShipModalOpen(true);
     };
 
-    const handleShipProduct = async (shipData: { product_model: string; product_name: string; outbound_date: string; quantity: number; customer_name: string; unit_price: number }) => {
+    const handleShipProduct = async (data: any) => {
         try {
-            await api.post('/shiplist', shipData);
+            await api.post('/shiplist', data);
+            fetchStocks();
             setIsShipModalOpen(false);
             setSelectedProductForShip(null);
         } catch (error) {
-            console.error('Error creating shipment:', error);
-            alert('出库失败');
+            console.error('Failed to ship product:', error);
+            throw error;
         }
     };
-
-    useMemo(() => {
-        fetchStocks();
-    }, []);
-
-    const handleUpdateInStock = async (product: Product, newValue: string) => {
-        const val = parseInt(newValue);
-        if (isNaN(val) || val === product.inStock) {
-            setEditingId(null);
-            return;
-        }
-
-        try {
-            await api.patch(`/stocks/${product.id}`, { inStock: val });
-            setProducts(prev => prev.map(p => p.id === product.id ? { ...p, inStock: val } : p));
-        } catch (error) {
-            console.error('Update inStock failed:', error);
-            alert('修改库存失败');
-        } finally {
-            setEditingId(null);
-        }
-    };
-
-    const filteredProducts = useMemo(() => {
-        const filtered = products.filter(product => {
-            const matchesSearch = product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                product.name.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesFilter = activeFilter === StockStatus.ALL || product.status === activeFilter;
-            return matchesSearch && matchesFilter;
-        });
-        setCurrentPage(1); // 搜索或筛选时重置到第一页
-        return filtered;
-    }, [products, searchTerm, activeFilter]);
-
-    const totalPages = Math.ceil(filteredProducts.length / pageSize);
-    const paginatedProducts = useMemo(() => {
-        const start = (currentPage - 1) * pageSize;
-        return filteredProducts.slice(start, start + pageSize);
-    }, [filteredProducts, currentPage, pageSize]);
 
     const stats = useMemo(() => {
         return {
@@ -206,16 +217,18 @@ const StockList: React.FC = () => {
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="border-b border-gray-100">
-                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 w-24 text-center">操作</th>
-                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400">产品型号</th>
-                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400">产品名称</th>
-                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400">备货建议</th>
-                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400">是否备货</th>
-                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400">呆滞状态</th>
-                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400">库存状态</th>
-                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 text-right w-24">在库</th>
-                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 text-right w-24">可用</th>
-                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 text-right w-24">在途</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 w-24 text-center whitespace-nowrap">操作</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 whitespace-nowrap">仓库</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 whitespace-nowrap">产品类型</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 whitespace-nowrap">产品型号</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 whitespace-nowrap">产品名称</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 whitespace-nowrap">备货建议</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 whitespace-nowrap">是否备货</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 whitespace-nowrap">呆滞状态</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 whitespace-nowrap">库存状态</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 text-right w-24 whitespace-nowrap">在库</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 text-right w-24 whitespace-nowrap">可用</th>
+                                        <th className="py-3 px-6 text-[13px] font-medium text-gray-400 text-right w-24 whitespace-nowrap">在途</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
@@ -228,16 +241,16 @@ const StockList: React.FC = () => {
                                                 </div>
                                             </td>
                                         </tr>
-                                    ) : paginatedProducts.length === 0 ? (
+                                    ) : products.length === 0 ? (
                                         <tr>
                                             <td colSpan={7} className="py-20 text-center text-gray-400">
                                                 <p className="text-sm font-medium">暂无匹配的备货数据</p>
                                             </td>
                                         </tr>
                                     ) : (
-                                        paginatedProducts.map((product) => (
+                                        products.map((product) => (
                                             <tr key={product.id} className="hover:bg-gray-50/50 transition-colors">
-                                                <td className="py-3 px-6 text-center text-gray-500">
+                                                <td className="py-3 px-6 text-center text-gray-500 whitespace-nowrap">
                                                     <div className="flex items-center justify-center gap-2">
                                                         <button className="flex items-center justify-center size-9 rounded-lg border border-gray-200 bg-white shadow-sm hover:bg-gray-50 hover:border-gray-300 hover:text-black transition-all" title="查看详情">
                                                             <Eye size={18} />
@@ -258,21 +271,27 @@ const StockList: React.FC = () => {
                                                         </button>
                                                     </div>
                                                 </td>
-                                                <td className="py-3 px-6 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors">
+                                                <td className="py-3 px-6 text-[15px] text-gray-900 font-medium whitespace-nowrap">
+                                                    {product.warehouse || '-'}
+                                                </td>
+                                                <td className="py-3 px-6 text-[15px] text-gray-600 whitespace-nowrap">
+                                                    {product.product_type || '-'}
+                                                </td>
+                                                <td className="py-3 px-6 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors whitespace-nowrap">
                                                     <Link to={`/stock/product/${product.sku}`} className="hover:underline">
                                                         {product.sku}
                                                     </Link>
                                                 </td>
-                                                <td className="py-3 px-6 text-[15px] font-semibold text-gray-900">
+                                                <td className="py-3 px-6 text-[15px] font-semibold text-gray-900 whitespace-nowrap">
                                                     {product.name}
                                                 </td>
-                                                <td className="py-3 px-6">
+                                                <td className="py-3 px-6 whitespace-nowrap">
                                                     <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold ${product.stockingRecommendation ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
                                                         {product.stockingRecommendation ? <ShieldCheck size={12} /> : <AlertTriangle size={12} />}
                                                         {product.stockingRecommendation ? '建议' : '不建议'}
                                                     </div>
                                                 </td>
-                                                <td className="py-3 px-6">
+                                                <td className="py-3 px-6 whitespace-nowrap">
                                                     <div className="flex items-center gap-1.5">
                                                         <div className={`size-2 rounded-full ${product.isStockingEnabled ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]' : 'bg-gray-300'}`}></div>
                                                         <span className={`text-[11px] font-bold ${product.isStockingEnabled ? 'text-blue-600' : 'text-gray-400'}`}>
@@ -280,7 +299,7 @@ const StockList: React.FC = () => {
                                                         </span>
                                                     </div>
                                                 </td>
-                                                <td className="py-3 px-6">
+                                                <td className="py-3 px-6 whitespace-nowrap">
                                                     <div className="flex items-center gap-1.5">
                                                         <div className={`size-2 rounded-full ${product.isDeadStock ? 'bg-red-500 animate-pulse' : 'bg-emerald-500'}`}></div>
                                                         <span className={`text-[11px] font-bold ${product.isDeadStock ? 'text-red-600' : 'text-emerald-600'}`}>
@@ -288,10 +307,10 @@ const StockList: React.FC = () => {
                                                         </span>
                                                     </div>
                                                 </td>
-                                                <td className="py-3 px-6">
+                                                <td className="py-3 px-6 whitespace-nowrap">
                                                     <StatusBadge status={product.status as StockStatus} />
                                                 </td>
-                                                <td className="py-3 px-6 text-right text-base font-bold text-gray-900 tabular-nums">
+                                                <td className="py-3 px-6 text-right text-base font-bold text-gray-900 tabular-nums whitespace-nowrap">
                                                     {editingId === product.id ? (
                                                         <input
                                                             autoFocus
@@ -318,10 +337,10 @@ const StockList: React.FC = () => {
                                                         </div>
                                                     )}
                                                 </td>
-                                                <td className="py-3 px-6 text-right text-[15px] text-gray-400 tabular-nums">
+                                                <td className="py-3 px-6 text-right text-[15px] text-gray-400 tabular-nums whitespace-nowrap">
                                                     {product.available}
                                                 </td>
-                                                <td className="py-3 px-6 text-right text-[15px] text-gray-400 tabular-nums">
+                                                <td className="py-3 px-6 text-right text-[15px] text-gray-400 tabular-nums whitespace-nowrap">
                                                     {product.inTransit}
                                                 </td>
                                             </tr>
@@ -334,7 +353,7 @@ const StockList: React.FC = () => {
                         {/* Pagination */}
                         <div className="mt-auto flex items-center justify-end gap-6 px-8 py-3 border-t border-gray-50 bg-gray-50/30">
                             <div className="text-[13px] text-gray-400">
-                                显示 {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filteredProducts.length)} / 共 {filteredProducts.length} 条数据
+                                显示 {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalItems)} / 共 {totalItems} 条数据
                             </div>
                             <div className="flex items-center gap-6">
                                 <div className="flex items-center gap-2">

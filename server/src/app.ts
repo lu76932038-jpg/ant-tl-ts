@@ -26,6 +26,7 @@ import { InquiryTaskModel } from './models/InquiryTask';
 import { PurchasePlanModel } from './models/PurchasePlan';
 import { UserModel } from './models/User';
 import { LoginLogModel } from './models/LoginLog';
+import { CustomerModel } from './models/Customer';
 import { SchedulerService } from './services/SchedulerService';
 import { authenticate, requireAdmin, requirePermission } from './middleware/auth';
 import { rateLimiter } from './middleware/rateLimiter';
@@ -95,6 +96,14 @@ app.use('/api/community', authenticate, standardLimiter, communityRoutes);
 import uploadRoutes from './routes/uploadRoutes';
 app.use('/api/upload', authenticate, standardLimiter, uploadRoutes);
 
+// Data Sync Routes
+import dataSyncRoutes from './routes/dataSyncRoutes';
+app.use('/api/datasync', authenticate, requireAdmin, dataSyncRoutes);
+
+// Customer Routes
+import customerRoutes from './routes/customerRoutes';
+app.use('/api/customers', authenticate, standardLimiter, customerRoutes);
+
 // Database Initialization (assuming initAdminUser and StockModel.initializeTable exist elsewhere or will be added)
 const initDB = async () => {
     try {
@@ -106,6 +115,7 @@ const initDB = async () => {
         await ShipListModel.initializeTable(); // Initialize ShipList table
         await InquiryTaskModel.initializeTable(); // Initialize InquiryTask table
         await PurchasePlanModel.initializeTable(); // Initialize PurchasePlan table
+        await CustomerModel.initializeTable(); // Initialize Customer table
 
         console.log('Database initialized.');
 

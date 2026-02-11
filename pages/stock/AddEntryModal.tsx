@@ -14,7 +14,8 @@ export const AddEntryModal: React.FC<AddEntryModalProps> = ({ onClose, onSuccess
         quantity: 100,
         unit_price: 0,
         arrival_date: new Date().toISOString().split('T')[0], // Default today
-        supplier: ''
+        supplier: '',
+        warehouse: ''
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -112,6 +113,16 @@ export const AddEntryModal: React.FC<AddEntryModalProps> = ({ onClose, onSuccess
                             onChange={e => setFormData({ ...formData, supplier: e.target.value })}
                             className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                             placeholder="供应商名称"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">仓库</label>
+                        <input
+                            type="text"
+                            value={formData.warehouse}
+                            onChange={e => setFormData({ ...formData, warehouse: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder="目标仓库名称"
                         />
                     </div>
 

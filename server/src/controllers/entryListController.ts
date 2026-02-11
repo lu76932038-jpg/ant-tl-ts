@@ -14,7 +14,7 @@ export class EntryListController {
 
     static async create(req: Request, res: Response) {
         try {
-            const { sku, product_name, quantity, unit_price, arrival_date, supplier } = req.body;
+            const { sku, product_name, quantity, unit_price, arrival_date, supplier, warehouse } = req.body;
 
             if (!sku || !arrival_date) {
                 return res.status(400).json({ error: 'Missing required fields' });
@@ -26,7 +26,8 @@ export class EntryListController {
                 quantity: Number(quantity),
                 unit_price: Number(unit_price || 0),
                 arrival_date,
-                supplier: supplier || 'Unknown'
+                supplier: supplier || 'Unknown',
+                warehouse
             });
 
             res.status(201).json({ success: true, id });

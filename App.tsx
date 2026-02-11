@@ -29,6 +29,10 @@ import InquiryList from './pages/inquiry/InquiryList';
 import InquiryDetail from './pages/inquiry/InquiryDetail';
 import StockHelpCenter from './pages/stock/StockHelpCenter';
 import FeedbackPage from './pages/feedback/FeedbackPage';
+import DataSync from './pages/system/DataSync';
+import InventoryDataSync from './pages/system/InventoryDataSync';
+import InboundDataSync from './pages/system/InboundDataSync';
+import CustomerList from './pages/customer/CustomerList';
 
 const App: React.FC = () => {
     return (
@@ -59,6 +63,10 @@ const App: React.FC = () => {
                         <Route path="at-orders" element={<AtOrders />} />
                         <Route path="community" element={<Community />} />
                         <Route path="community/:id" element={<CommunityDetail />} />
+
+                        <Route path="community/:id" element={<CommunityDetail />} />
+
+                        <Route path="customer/list" element={<CustomerList />} />
 
                         {/* 备货助手 (需要 stock_list 权限) */}
                         <Route element={
@@ -100,6 +108,30 @@ const App: React.FC = () => {
                             element={
                                 <ProtectedRoute requireAdmin>
                                     <LoginLogs />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="system/data-sync/outbound"
+                            element={
+                                <ProtectedRoute requireAdmin>
+                                    <DataSync />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="system/data-sync/inventory"
+                            element={
+                                <ProtectedRoute requireAdmin>
+                                    <InventoryDataSync />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="system/data-sync/inbound"
+                            element={
+                                <ProtectedRoute requireAdmin>
+                                    <InboundDataSync />
                                 </ProtectedRoute>
                             }
                         />
