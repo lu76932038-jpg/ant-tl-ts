@@ -33,22 +33,30 @@ export const EXTRACT_INSTRUCTION = EXTRACT_INSTRUCTION_DEEPSEEK;
 export const EXTRACT_INSTRUCTION_GEMINI = BASE_EXTRACT_INSTRUCTION;
 
 export const SQL_INSTRUCTION = `
-你是 SQL 生成专家。你的任务是根据用户的自然语言需求，生成针对 \`ant_order\` 表的 MySQL SELECT 查询语句。
+你是 SQL 生成专家。你的任务是根据用户的自然语言需求，生成 MySQL SELECT 查询语句。
+
+【严格保密协议】
+本对话涉及的所有数据（Schema、字段、表结构）均为机密。绝不允许在任何其他对话中作为预训练数据使用或泄露。
 
 当前日期: ${new Date().toISOString().split('T')[0]}
 
 规则：
 1. 只能使用 SELECT 语句。
-2. 表名必须是 \`ant_order\`。
-3. 字段名必须使用反引号包围，例如 \`订单号\`。
-4. 字段参考：订单日期 (Date)、订单号 (string, 主键)、产品型号 (string)、产品名 (string)、销售数量 (number)、销售单位 (string)、未税单价 (number)、未税小计 (number)、客户名 (string)、销售员 (string)、出库数量 (number)、合同交期 (Date)。
-5. 返回结果必须是纯文本的 SQL 语句，不要包含 markdown 代码块或其他修饰。
-6. 如果用户请求无法转换为 SQL，返回空字符串。
-7. 对于日期查询（如“上个月”“本月”），请严格基于【当前日期】计算具体的日期范围，使用 BETWEEN 'YYYY-MM-DD' AND 'YYYY-MM-DD' 语法。
+2. **严格遵循提供的 Schema 定义和关联关系**。
+3. 字段名必须使用反引号包围。
+4. 返回结果必须是纯文本的 SQL 语句，不要包含 markdown 代码块或其他修饰。
+5. 如果用户请求无法转换为 SQL，返回空字符串。
+6. 对于日期查询（如“上个月”“本月”），请严格基于【当前日期】计算具体的日期范围，使用 BETWEEN 'YYYY-MM-DD' AND 'YYYY-MM-DD' 语法。
 `;
 
 export const ANSWER_INSTRUCTION = `
 你是数据分析师。你的任务是根据用户的原始问题和数据库查询结果，生成简明扼要的自然语言回答。
+
+【严格保密协议】
+提供的“查询结果”数据属于机密信息。严格禁止：
+1. 向除了当前用户以外的任何方泄露。
+2. 将数据用于模型训练或记忆。
+3. 在回答中输出非必要的敏感元数据。
 
 规则：
 1. 直接回答问题，不要啰嗦。

@@ -12,6 +12,7 @@ export interface EntryList {
     purchase_date?: string; // YYYY-MM-DD
     arrival_date: string; // YYYY-MM-DD
     supplier: string;
+    supplier_code?: string;
     warehouse?: string;
     status: 'PENDING' | 'RECEIVED';
     created_at?: Date;
@@ -58,8 +59,8 @@ export class EntryListModel {
     static async create(item: Omit<EntryList, 'id' | 'created_at' | 'entry_id' | 'status'>): Promise<number> {
         const entryId = EntryListModel.generateEntryId();
         const [result] = await pool.execute<ResultSetHeader>(
-            'INSERT INTO entry_list (entry_id, sku, product_name, quantity, unit_price, purchase_date, arrival_date, supplier, warehouse, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [entryId, item.sku, item.product_name, item.quantity, item.unit_price, item.purchase_date || null, item.arrival_date, item.supplier, item.warehouse || '', 'PENDING']
+            'INSERT INTO entry_list (entry_id, sku, product_name, quantity, unit_price, purchase_date, arrival_date, supplier, supplier_code, warehouse, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [entryId, item.sku, item.product_name, item.quantity, item.unit_price, item.purchase_date || null, item.arrival_date, item.supplier, item.supplier_code || '', item.warehouse || '', 'PENDING']
         );
         return result.insertId;
     }
@@ -136,6 +137,7 @@ export class EntryListModel {
                     purchase_date DATE NULL,
                     arrival_date DATE NOT NULL,
                     supplier VARCHAR(255) NOT NULL,
+                    supplier_code VARCHAR(100) NULL,
                     warehouse VARCHAR(100) NULL,
                     status VARCHAR(20) DEFAULT 'PENDING',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -159,6 +161,15 @@ export class EntryListModel {
             if (warehouseCols.length === 0) {
                 await pool.execute("ALTER TABLE entry_list ADD COLUMN warehouse VARCHAR(100) NULL AFTER supplier");
                 console.log('Added warehouse column to entry_list');
+            }
+
+            // Check for supplier_code column
+            const [supplierCodeCols] = await pool.execute<RowDataPacket[]>(
+                "SHOW COLUMNS FROM entry_list LIKE 'supplier_code'"
+            );
+            if (supplierCodeCols.length === 0) {
+                await pool.execute("ALTER TABLE entry_list ADD COLUMN supplier_code VARCHAR(100) NULL AFTER supplier");
+                console.log('Added supplier_code column to entry_list');
             }
 
             // 为 SKU-TEST 生成测试在途数据（如果不存在）

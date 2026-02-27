@@ -4,12 +4,42 @@ import { HttpsProxyAgent } from "https-proxy-agent";
 import nodeFetch from "node-fetch";
 import { AIResponseItem, ParsedInquiryItem } from "../types";
 import { config } from "../config/env";
-import { EXTRACT_INSTRUCTION_GEMINI, SQL_INSTRUCTION, ANSWER_INSTRUCTION } from "../config/prompts";
 import { GEMINI_SCHEMA } from "../config/schema";
 import { normalizeInquiryData } from "../utils/inquiryUtils";
+import { AiPromptModel } from "../models/AiPrompt";
+import { AiSchemaDocModel } from "../models/AiSchemaDoc";
+import { EXTRACT_INSTRUCTION_GEMINI, SQL_INSTRUCTION, ANSWER_INSTRUCTION } from "../config/prompts"; // Fallback imports
 
 // Schema definition moved to ../config/schema
 
+
+// Helper to get prompt with fallback
+const getPrompt = async (key: string, defaultContent: string): Promise<string> => {
+    try {
+        const prompt = await AiPromptModel.findActive(key);
+        return prompt ? prompt.content : defaultContent;
+    } catch (error) {
+        console.warn(`Failed to fetch prompt ${key}, using default.`, error);
+        return defaultContent;
+    }
+};
+
+// Helper to get schema context
+const getSchemaContext = async (): Promise<string> => {
+    try {
+        const docs = await AiSchemaDocModel.findAll();
+        if (docs.length === 0) return "";
+
+        return docs.map(doc => `
+    表名: ${doc.table_name}
+    描述: ${doc.description}
+    ${doc.column_info}
+        `).join('\n');
+    } catch (error) {
+        console.warn("Failed to fetch schema docs.", error);
+        return "";
+    }
+};
 
 /**
  * 专门用于从图片中提取纯文本 (OCR)，不进行结构化解析
@@ -78,7 +108,7 @@ export const extractDataFromContent = async (
     const MODEL = config.ai.geminiModel;
     const URL = `${config.ai.geminiUrl}/models/${MODEL}:generateContent?key=${API_KEY}`;
 
-    const systemInstruction = EXTRACT_INSTRUCTION_GEMINI;
+    const systemInstruction = await getPrompt('extract_instruction_gemini', EXTRACT_INSTRUCTION_GEMINI);
 
     // Construct payload
     const parts = typeof content === 'string'
@@ -168,7 +198,9 @@ export const generateSqlForOrders = async (prompt: string): Promise<{ sql: strin
     }
     const ai = new GoogleGenAI(geminiOptions);
 
-    const schemaInfo = `
+    const schemaInfo = await getSchemaContext();
+    // Fallback if DB is empty
+    const finalSchemaInfo = schemaInfo || `
     表名: ant_order
     字段:
     - 订单日期 (Date)
@@ -187,7 +219,12 @@ export const generateSqlForOrders = async (prompt: string): Promise<{ sql: strin
 
     const today = new Date().toISOString().split('T')[0];
 
-    const systemInstruction = SQL_INSTRUCTION;
+    let systemInstruction = await getPrompt('sql_instruction', SQL_INSTRUCTION);
+
+    // Inject dynamic schema and date
+    systemInstruction = systemInstruction
+        .replace('${new Date().toISOString().split(\'T\')[0]}', today) // Handle potential template literal in DB
+        + `\n\nSchema 定义:\n${finalSchemaInfo}`;
 
     console.log(`[Gemini SQL] Prompt: ${prompt}, Today: ${today}`);
 
@@ -235,7 +272,7 @@ export const generateAnswerFromData = async (originalPrompt: string, data: any[]
     const dataStr = JSON.stringify(dataSlice);
     const isTruncated = data.length > MAX_ITEMS ? `(仅展示前 ${MAX_ITEMS} 条)` : "";
 
-    const systemInstruction = ANSWER_INSTRUCTION;
+    const systemInstruction = await getPrompt('answer_instruction', ANSWER_INSTRUCTION);
 
     const geminiOptions: any = { apiKey: config.ai.geminiKey };
     if (config.proxy) {

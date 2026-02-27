@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, PieChart, Table as TableIcon, History, Bot, Terminal, X, ChevronRight, Activity, Trash2 } from 'lucide-react';
+import { Send, Sparkles, PieChart, Table as TableIcon, History, Bot, Terminal, X, ChevronRight, Activity, Trash2, MessageSquarePlus, MessageSquare, Edit2 } from 'lucide-react';
 
 interface Message {
     role: 'user' | 'ai';
@@ -7,11 +7,20 @@ interface Message {
     type?: 'text' | 'table' | 'chart';
     data?: any;
     sql?: string;
+    debug?: any;
+    id?: number; // logId for feedback
+    feedback?: 'like' | 'dislike';
+}
+
+interface Session {
+    id: string;
+    title: string;
+    updated_at: string;
 }
 
 const AtOrderChat: React.FC = () => {
     const [input, setInput] = useState('');
-    const [selectedModel, setSelectedModel] = useState<'gemini' | 'deepseek'>('deepseek');
+    const [selectedModel, setSelectedModel] = useState<'deepseek'>('deepseek');
     const [messages, setMessages] = useState<Message[]>([
         {
             role: 'ai',
@@ -20,15 +29,184 @@ const AtOrderChat: React.FC = () => {
         }
     ]);
     const [isTyping, setIsTyping] = useState(false);
+
+    // Session State
+    const [sessions, setSessions] = useState<Session[]>([]);
+    const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+    const [isSessionLoading, setIsSessionLoading] = useState(false);
+
+    // Logs State
     const [isLogOpen, setIsLogOpen] = useState(false);
     const [logs, setLogs] = useState<{ id: string; time: string; type: 'info' | 'success' | 'warning' | 'error'; content: string; detail?: string }[]>([]);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
 
+    const messagesEndRef = useRef<HTMLDivElement>(null);
     const logsEndRef = useRef<HTMLDivElement>(null);
 
-    const addLog = (content: string, type: 'info' | 'success' | 'warning' | 'error' = 'info', detail?: string) => {
+    // --- Session Logic ---
+    useEffect(() => {
+        fetchSessions();
+    }, []);
+
+    const fetchSessions = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch('/api/rag/sessions', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSessions(data.data);
+            }
+        } catch (e) {
+            console.error("Failed to fetch sessions", e);
+        }
+    };
+
+    const createNewSession = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch('/api/rag/sessions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ title: '新会话' })
+            });
+            const result = await res.json();
+            if (result.success) {
+                const newSession = result.data;
+                // Ensure updated_at is present, fallback to now if missing (should be fixed in backend)
+                if (!newSession.updated_at) newSession.updated_at = new Date().toISOString();
+
+                setSessions(prev => [newSession, ...prev]); // Add to top
+                setCurrentSessionId(newSession.id);
+                setMessages([{
+                    role: 'ai',
+                    content: '已创建新会话。请问有什么可以帮您？',
+                    type: 'text'
+                }]);
+                return newSession.id;
+            }
+        } catch (e) {
+            console.error("Failed to create session", e);
+        }
+        return null;
+    };
+
+    const loadSession = async (sessionId: string) => {
+        if (currentSessionId === sessionId) return;
+
+        setIsSessionLoading(true);
+        setCurrentSessionId(sessionId);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`/api/rag/sessions/${sessionId}/messages`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const result = await res.json();
+            if (result.success) {
+                // Tranform backend messages to UI messages
+                const history: Message[] = result.data.map((msg: any) => ({
+                    role: msg.role === 'user' ? 'user' : 'ai',
+                    content: msg.content,
+                    type: msg.sql ? 'table' : 'text', // Simple heuristic, refinements needed if we persisted type
+                    // Ideally backend stores 'type' and 'data', but for now we reconstruct or just show text
+                    // Check if content looks like JSON data? 
+                    // For history, we might lose the 'data' object if we only stored 'final_answer'. 
+                    // Wait, AiChatLog stores 'final_answer'. It doesn't store the raw JSON data result.
+                    // So history playback will be TEXT ONLY unless we parsed it.
+                    // Actually, for now, let's just show text. 
+                    sql: msg.sql,
+                    debug: msg.debug,
+                    id: msg.id,
+                    feedback: msg.feedback_score === 1 ? 'like' : msg.feedback_score === -1 ? 'dislike' : undefined
+                }));
+
+                if (history.length === 0) {
+                    setMessages([{
+                        role: 'ai',
+                        content: '这是一个新会话。',
+                        type: 'text'
+                    }]);
+                } else {
+                    setMessages(history);
+                }
+            }
+        } catch (e) {
+            console.error("Failed to load session", e);
+        } finally {
+            setIsSessionLoading(false);
+        }
+    };
+
+    const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+    const [editingTitle, setEditingTitle] = useState('');
+
+    const startEditing = (e: React.MouseEvent, session: Session) => {
+        e.stopPropagation();
+        setEditingSessionId(session.id);
+        setEditingTitle(session.title);
+    };
+
+    const saveSessionTitle = async (sessionId: string) => {
+        if (!editingTitle.trim() || editingTitle === sessions.find(s => s.id === sessionId)?.title) {
+            setEditingSessionId(null);
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch(`/api/rag/sessions/${sessionId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ title: editingTitle })
+            });
+            const result = await res.json();
+            if (result.success) {
+                setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, title: editingTitle } : s));
+            }
+        } catch (e) {
+            console.error("Failed to update session title", e);
+        } finally {
+            setEditingSessionId(null);
+        }
+    };
+
+    const deleteSession = async (e: React.MouseEvent, sessionId: string) => {
+        e.stopPropagation();
+        if (!confirm("确定删除此会话吗？")) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            await fetch(`/api/rag/sessions/${sessionId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            setSessions(prev => prev.filter(s => s.id !== sessionId));
+            if (currentSessionId === sessionId) {
+                setCurrentSessionId(null);
+                setMessages([{ role: 'ai', content: '会话已删除。', type: 'text' }]);
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    const scrollToLogsBottom = () => {
+        logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    const addLog = (content: string, type: 'info' | 'success' | 'warning' | 'error', detail?: string) => {
         setLogs(prev => [...prev, {
-            id: Date.now().toString(),
+            id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
             time: new Date().toLocaleTimeString(),
             type,
             content,
@@ -38,14 +216,6 @@ const AtOrderChat: React.FC = () => {
 
     const clearLogs = () => {
         setLogs([]);
-    };
-
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
-
-    const scrollToLogsBottom = () => {
-        logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
     useEffect(() => {
@@ -65,8 +235,49 @@ const AtOrderChat: React.FC = () => {
         "导出本周订单列表"
     ];
 
+    const handleFeedback = async (msgIndex: number, type: 'like' | 'dislike') => {
+        const msg = messages[msgIndex];
+        if (!msg.id) return;
+
+        // Optimistic UI update
+        setMessages(prev => prev.map((m, i) => i === msgIndex ? { ...m, feedback: type } : m));
+
+        try {
+            const token = localStorage.getItem('token');
+            // Assuming we have a feedback endpoint. 
+            // Phase 2 Plan says: POST /api/rag/logs/:id/feedback
+            await fetch(`/api/rag/logs/${msg.id}/feedback`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    score: type === 'like' ? 1 : -1
+                })
+            });
+            addLog(`Feedback Submitted`, 'success', `LogID: ${msg.id}, Type: ${type}`);
+        } catch (error) {
+            console.error('Feedback failed:', error);
+            // Revert on failure? Or just log error.
+            addLog(`Feedback Failed`, 'error', String(error));
+        }
+    };
+
     const handleSend = async () => {
         if (!input.trim()) return;
+
+        // Auto-create session if none selected
+        let activeSessionId = currentSessionId;
+        if (!activeSessionId) {
+            activeSessionId = await createNewSession();
+        }
+
+        if (!activeSessionId) {
+            addLog('Session Creation Failed', 'error', 'Could not create a new session. Please try again.');
+            setMessages(prev => [...prev, { role: 'ai', content: '创建会话失败，请刷新页面重试。' }]);
+            return;
+        }
 
         const userMsg: Message = { role: 'user', content: input };
         setMessages(prev => [...prev, userMsg]);
@@ -75,12 +286,23 @@ const AtOrderChat: React.FC = () => {
         setIsTyping(true);
         addLog(`Started request: ${currentInput}`, 'info', `Model: ${selectedModel}\nTimestamp: ${new Date().toISOString()}`);
 
+        const token = localStorage.getItem('token');
         try {
             const response = await fetch('/api/orders/chat', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: currentInput, model: selectedModel })
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    message: currentInput,
+                    model: selectedModel,
+                    sessionId: activeSessionId // Pass Session ID
+                })
             });
+
+            // Refresh session list to update timestamp/sort
+            fetchSessions();
 
             const result = await response.json();
 
@@ -110,7 +332,8 @@ const AtOrderChat: React.FC = () => {
                     role: 'ai',
                     content: result.message || '为您查询到以下结果：',
                     type: 'text',
-                    sql: result.sql
+                    sql: result.sql,
+                    id: result.logId
                 };
 
                 if (Array.isArray(data) && data.length > 0) {
@@ -154,12 +377,7 @@ const AtOrderChat: React.FC = () => {
                             role: 'ai',
                             content: result.message || `查询到 ${data.length} 条符合条件的订单记录：`,
                             type: 'table',
-                            data: data.map((item: any) => ({
-                                id: item.订单号 || 'N/A',
-                                customer: item.客户名 || item.销售员 || '佚名',
-                                amount: item.未税小计 !== undefined ? `￥${item.未税小计.toLocaleString()}` : 'N/A',
-                                ...item
-                            }))
+                            data: data
                         };
                     }
                 } else if (Array.isArray(data) && data.length === 0) {
@@ -169,7 +387,7 @@ const AtOrderChat: React.FC = () => {
 
                 setMessages(prev => [...prev, aiMsg]);
             } else {
-                setMessages(prev => [...prev, { role: 'ai', content: `查询失败: ${result.message}` }]);
+                setMessages(prev => [...prev, { role: 'ai', content: `查询失败: ${result.message || JSON.stringify(result)}` }]);
             }
         } catch (error) {
             console.error('Chat Error:', error);
@@ -183,12 +401,100 @@ const AtOrderChat: React.FC = () => {
 
     return (
         <div className="flex flex-row w-full h-full bg-white/40 overflow-hidden relative">
+
+            {/* Session Sidebar */}
+            <div className="w-64 bg-slate-50/50 border-r border-white/20 flex flex-col backdrop-blur-sm">
+                <div className="p-4">
+                    <button
+                        onClick={() => createNewSession()}
+                        className="w-full flex items-center justify-center gap-2 bg-[#2c2c2c] text-white py-3 rounded-xl hover:bg-black transition-all shadow-lg active:scale-95"
+                    >
+                        <MessageSquarePlus className="w-4 h-4" />
+                        <span className="text-xs font-bold">New Chat</span>
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar">
+                    {sessions.map(session => (
+                        <div
+                            key={session.id}
+                            onClick={() => loadSession(session.id)}
+                            className={`group relative p-3 rounded-lg cursor-pointer transition-all border ${currentSessionId === session.id
+                                ? 'bg-white border-white shadow-sm'
+                                : 'hover:bg-white/50 border-transparent hover:border-white/30'
+                                }`}
+                        >
+                            <div className="flex items-start gap-3">
+                                <MessageSquare className={`w-4 h-4 mt-1 ${currentSessionId === session.id ? 'text-indigo-600' : 'text-slate-400'}`} />
+                                <div className="flex-1 min-w-0">
+                                    {editingSessionId === session.id ? (
+                                        <input
+                                            autoFocus
+                                            type="text"
+                                            value={editingTitle}
+                                            onChange={(e) => setEditingTitle(e.target.value)}
+                                            onBlur={() => saveSessionTitle(session.id)}
+                                            onKeyDown={(e) => e.key === 'Enter' && saveSessionTitle(session.id)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="w-full bg-white border border-indigo-200 rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                        />
+                                    ) : (
+                                        <div
+                                            className={`text-xs font-medium truncate ${currentSessionId === session.id ? 'text-slate-800' : 'text-slate-600'}`}
+                                            onDoubleClick={(e) => startEditing(e, session)}
+                                            title="Double click to rename"
+                                        >
+                                            {session.title || 'Untitled Session'}
+                                        </div>
+                                    )}
+                                    <div className="text-[10px] text-slate-400 mt-1">
+                                        {new Date(session.updated_at).toLocaleDateString()}
+                                    </div>
+                                </div>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                        onClick={(e) => startEditing(e, session)}
+                                        className="p-1 hover:bg-indigo-50 text-slate-400 hover:text-indigo-500 rounded transition-all"
+                                        title="Rename"
+                                    >
+                                        <Edit2 className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                        onClick={(e) => deleteSession(e, session.id)}
+                                        className="p-1 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded transition-all"
+                                        title="Delete"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
             {/* Main Chat Area */}
-            <div className="flex-1 flex flex-col h-full min-w-0 transition-all duration-300 ease-in-out">
+            <div className="flex-1 flex flex-col h-full min-w-0 transition-all duration-300 ease-in-out relative">
+                {/* Floating Log Toggle */}
+                <button
+                    onClick={() => setIsLogOpen(!isLogOpen)}
+                    className="absolute top-4 right-4 z-10 p-2 bg-white/50 hover:bg-white rounded-full shadow-sm text-slate-500 hover:text-slate-800 transition-all"
+                    title="Toggle Logs"
+                >
+                    <Activity className="w-5 h-5" />
+                </button>
+
                 {/* Messages Area */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-                    {messages.map((msg, i) => (
-                        <div key={i} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+                    {isSessionLoading ? (
+                        <div className="flex items-center justify-center h-full text-slate-400 text-sm">
+                            <div className="animate-spin mr-2">
+                                <Activity className="w-4 h-4" />
+                            </div>
+                            Loading history...
+                        </div>
+                    ) : messages.map((msg, i) => (
+                        <div key={i} className={`flex gap-4 group ${msg.role === 'user' ? 'flex-row-reverse' : ''} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
                             <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-lg ${msg.role === 'ai' ? 'bg-[#2c2c2c] text-white' : 'bg-white text-slate-600 border border-white/40'
                                 }`}>
                                 {msg.role === 'ai' ? <Sparkles className="w-5 h-5" /> : <Send className="w-4 h-4 rotate-[-45deg]" />}
@@ -200,22 +506,48 @@ const AtOrderChat: React.FC = () => {
                                     }`}>
                                     <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
 
-                                    {msg.type === 'table' && (
+                                    {/* Feedback Buttons */}
+                                    {msg.role === 'ai' && msg.id && (
+                                        <div className="mt-2 flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                onClick={() => handleFeedback(i, 'like')}
+                                                className={`p-1 rounded hover:bg-slate-100 transition-colors ${msg.feedback === 'like' ? 'text-green-500' : 'text-slate-400'}`}
+                                                title="有用"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 10v12" /><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z" /></svg>
+                                            </button>
+                                            <button
+                                                onClick={() => handleFeedback(i, 'dislike')}
+                                                className={`p-1 rounded hover:bg-slate-100 transition-colors ${msg.feedback === 'dislike' ? 'text-red-500' : 'text-slate-400'}`}
+                                                title="无用/错误"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 14V2" /><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22h0a3.13 3.13 0 0 1-3-3.88Z" /></svg>
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {msg.type === 'table' && msg.data && (
                                         <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-100 bg-white">
                                             <table className="w-full text-xs">
                                                 <thead className="bg-slate-50 border-b border-slate-100">
                                                     <tr>
-                                                        <th className="px-3 py-2 text-left font-bold text-slate-500">订单号</th>
-                                                        <th className="px-3 py-2 text-left font-bold text-slate-500">客户</th>
-                                                        <th className="px-3 py-2 text-right font-bold text-slate-500">金额</th>
+                                                        {msg.data.length > 0 && Object.keys(msg.data[0]).map((key) => (
+                                                            <th key={key} className="px-3 py-2 text-left font-bold text-slate-500 capitalize">
+                                                                {key}
+                                                            </th>
+                                                        ))}
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-50">
                                                     {msg.data.map((row: any, idx: number) => (
                                                         <tr key={idx} className="hover:bg-slate-50/50">
-                                                            <td className="px-3 py-2 font-mono text-blue-600">{row.id}</td>
-                                                            <td className="px-3 py-2 text-slate-600">{row.customer}</td>
-                                                            <td className="px-3 py-2 text-right font-bold text-slate-900">{row.amount}</td>
+                                                            {Object.values(row).map((val: any, vIdx) => (
+                                                                <td key={vIdx} className="px-3 py-2 text-slate-600">
+                                                                    {typeof val === 'number' && (String(val).includes('.') || val > 1000)
+                                                                        ? val.toLocaleString()
+                                                                        : val}
+                                                                </td>
+                                                            ))}
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -223,7 +555,7 @@ const AtOrderChat: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {msg.type === 'chart' && (
+                                    {msg.type === 'chart' && msg.data && (
                                         <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-end gap-2 h-40">
                                             {msg.data.values.map((val: number, idx: number) => {
                                                 const max = Math.max(...msg.data.values) || 1;
@@ -244,7 +576,7 @@ const AtOrderChat: React.FC = () => {
                                                     <div key={idx} className="flex-1 flex flex-col items-center gap-2 group">
                                                         <div className="relative w-full flex items-end justify-center">
                                                             <div
-                                                                className={`w-[80%] bg-gradient-to-t ${gradientClass} rounded-t-lg shadow-md transition-all duration-500 ease-out group-hover:scale-y-105 origin-bottom relative overflow-hidden`}
+                                                                className={`w-[80%] max-w-[48px] bg-gradient-to-t ${gradientClass} rounded-t-lg shadow-md transition-all duration-500 ease-out group-hover:scale-y-105 origin-bottom relative overflow-hidden`}
                                                                 style={{ height: `${heightPx}px` }}
                                                             >
                                                                 {/* Glass shine effect */}
@@ -318,39 +650,15 @@ const AtOrderChat: React.FC = () => {
                         </button>
                     </div>
 
-                    {/* Model Selector */}
-                    <div className="flex justify-center gap-4 mt-4">
-                        <button
-                            onClick={() => setSelectedModel('gemini')}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedModel === 'gemini'
-                                ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                                : 'bg-white/40 text-slate-500 border border-transparent hover:bg-white/60'
-                                }`}
-                        >
-                            <Sparkles className="w-3.5 h-3.5" />
-                            Gemini 2.0 Flash
-                        </button>
-                        <button
-                            onClick={() => setSelectedModel('deepseek')}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${selectedModel === 'deepseek'
-                                ? 'bg-purple-100 text-purple-700 border border-purple-200'
-                                : 'bg-white/40 text-slate-500 border border-transparent hover:bg-white/60'
-                                }`}
-                        >
+                    {/* Model Selector Removed - Defaulting to DeepSeek */}
+                    <div className="flex justify-center gap-4 mt-4 opacity-50 pointer-events-none">
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200">
                             <Bot className="w-3.5 h-3.5" />
-                            DeepSeek R1
-                        </button>
-                        <div className="w-px h-4 bg-slate-300 mx-2" />
-                        <button
-                            onClick={() => setIsLogOpen(!isLogOpen)}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${isLogOpen
-                                ? 'bg-slate-800 text-white border border-slate-700'
-                                : 'bg-white/40 text-slate-500 border border-transparent hover:bg-white/60'
-                                }`}
-                        >
-                            <Terminal className="w-3.5 h-3.5" />
-                            Log Panel
-                        </button>
+                            DeepSeek 智能助手
+                        </div>
+                    </div>
+                    <div className="hidden">
+                        {/* Legacy Gemini Selector Hidden */}
                     </div>
 
                     <div className="mt-4 flex items-center justify-center gap-8 text-[9px] text-slate-400 font-black uppercase tracking-[0.2em]">

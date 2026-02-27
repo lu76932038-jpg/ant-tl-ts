@@ -150,7 +150,7 @@ export class ShipListModel {
                 CREATE TABLE IF NOT EXISTS shiplist (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     outbound_id VARCHAR(50) UNIQUE NOT NULL,
-                    product_model VARCHAR(100) NOT NULL,
+                    product_model VARCHAR(255) NOT NULL,
                     product_name VARCHAR(255) NOT NULL,
                     product_type VARCHAR(100),
                     outbound_date DATE NOT NULL,
@@ -159,11 +159,20 @@ export class ShipListModel {
                     customer_code VARCHAR(100),
                     unit_price DECIMAL(10, 2) DEFAULT 0.00,
                     warehouse VARCHAR(50),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_outbound_id (outbound_id)
                 )
             `);
 
             // Schema Migrations
+            try {
+                // Ensure product_model is varchar(255)
+                await pool.execute(`ALTER TABLE shiplist MODIFY COLUMN product_model VARCHAR(255) NOT NULL;`);
+            } catch (err: any) {
+                // Ignore if already 255 or other errors, but usually modifying is safe unless data issue (truncation shouldn't happen when expanding)
+                console.log('Product Model modify check:', err.message);
+            }
+
             try {
                 // Add unit_price if missing
                 await pool.execute(`ALTER TABLE shiplist ADD COLUMN unit_price DECIMAL(10, 2) DEFAULT 0.00;`);
@@ -177,29 +186,33 @@ export class ShipListModel {
             try {
                 // Add customer_code if missing
                 await pool.execute(`ALTER TABLE shiplist ADD COLUMN customer_code VARCHAR(100);`);
-                console.log('Added customer_code column.');
             } catch (err: any) { if (err.code !== 'ER_DUP_FIELDNAME') console.log('Customer code col exists'); }
 
             try {
                 // Add product_type if missing
                 await pool.execute(`ALTER TABLE shiplist ADD COLUMN product_type VARCHAR(100);`);
-                console.log('Added product_type column.');
             } catch (err: any) { if (err.code !== 'ER_DUP_FIELDNAME') console.log('Product type col exists'); }
 
             try {
-                // Add outbound_id if missing
+                // Add outbound_id if missing (and ensure UNIQUE)
                 await pool.execute(`ALTER TABLE shiplist ADD COLUMN outbound_id VARCHAR(50) UNIQUE;`);
                 console.log('Added outbound_id column.');
-
-                // If we just added the column, we might need to populate it for existing records
-                // For simplicity, we can update in SQL or just leave null if allowed (but we set NOT NULL logic above for CREATE, ALTER usually allows NULL unless specified)
-                // Let's force update existing nulls
-                const [rows] = await pool.execute<RowDataPacket[]>('SELECT id, created_at FROM shiplist WHERE outbound_id IS NULL');
-                for (const row of rows) {
-                    const fakeId = 'CK' + new Date(row.created_at).getTime() + Math.floor(Math.random() * 1000);
-                    await pool.execute('UPDATE shiplist SET outbound_id = ? WHERE id = ?', [fakeId, row.id]);
-                }
             } catch (err: any) { if (err.code !== 'ER_DUP_FIELDNAME') console.log('Outbound ID col exists'); }
+
+            try {
+                // Remove unique_key if exists (cleanup)
+                await pool.execute(`ALTER TABLE shiplist DROP COLUMN unique_key;`);
+            } catch (err: any) {
+                // Ignore if col doesn't exist
+            }
+
+            try {
+                // ENFORCE UNIQUE outbound_id
+                await pool.execute(`CREATE UNIQUE INDEX outbound_id ON shiplist (outbound_id)`);
+                console.log('Restored UNIQUE constraint on outbound_id.');
+            } catch (err: any) {
+                console.log('Index restore check:', err.message);
+            }
 
             console.log('Shiplist table created/verified successfully');
         } catch (error) {

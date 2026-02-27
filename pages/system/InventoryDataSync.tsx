@@ -58,8 +58,8 @@ const InventoryDataSync: React.FC = () => {
 
     const fetchStatus = async () => {
         try {
-            const res = await api.get('/datasync/status');
-            setIsSyncing(res.data.isInventorySyncing);
+            const res: any = await api.get('/datasync/status');
+            setIsSyncing(res?.isInventorySyncing ?? false);
         } catch (error) {
             console.error('Failed to fetch status', error);
         }
@@ -351,12 +351,12 @@ const InventoryDataSync: React.FC = () => {
                             <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800">
                                 <div className="font-bold flex items-center gap-1 mb-1">
                                     <AlertTriangle size={14} />
-                                    SQL 必需列定义:
+                                    SQL 字段映射说明:
                                 </div>
                                 <div className="flex flex-wrap gap-2 mt-2">
-                                    <span className="bg-white border border-blue-200 px-2 py-0.5 rounded"><b>warehouse</b>: 仓库名称</span>
-                                    <span className="bg-white border border-blue-200 px-2 py-0.5 rounded"><b>product_model</b>: 产品型号 (SKU)</span>
-                                    <span className="bg-white border border-blue-200 px-2 py-0.5 rounded"><b>quantity</b>: 当前库存数</span>
+                                    <span className="bg-white border border-blue-200 px-2 py-0.5 rounded" title="必填"><b>warehouse</b>: 仓库名称</span>
+                                    <span className="bg-white border border-blue-200 px-2 py-0.5 rounded" title="必填"><b>product_model</b>: 产品型号 (SKU)</span>
+                                    <span className="bg-white border border-blue-200 px-2 py-0.5 rounded" title="必填"><b>quantity</b>: 当前库存数</span>
                                 </div>
                                 <div className="mt-2 text-[10px] text-blue-600">
                                     提示：如果备货产品库中不存在该型号，系统将根据 product_model 自动创建。

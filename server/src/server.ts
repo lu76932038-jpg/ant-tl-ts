@@ -1,6 +1,17 @@
 import app from './app';
 import { config } from './config/env';
 import { UserModel } from './models/User';
+import { ShipListModel } from './models/ShipList';
+import { AiChatLogModel } from './models/AiChatLog';
+import { AiChatSessionModel } from './models/AiChatSession';
+import { AiPromptModel } from './models/AiPrompt';
+import { AiSchemaDocModel } from './models/AiSchemaDoc';
+import { AiChatEvaluationModel } from './models/AiChatEvaluation';
+import { EntryListModel } from './models/EntryList';
+import { StrategyModel } from './models/Strategy';
+import { InquiryTaskModel } from './models/InquiryTask';
+import { CustomerModel } from './models/Customer';
+import { OutboundPlanModel } from './models/OutboundPlan';
 import { AuditLogModel } from './models/AuditLog';
 import { StockModel } from './models/Stock';
 import { createServer } from 'http';
@@ -13,22 +24,29 @@ const httpServer = createServer(app);
 initSocket(httpServer);
 
 // 初始化数据库
-async function initializeDatabase() {
+const initializeDatabase = async () => {
     try {
         console.log('正在初始化数据库...');
-        await UserModel.initializeTable();
-        await AuditLogModel.initializeTable();
-        const { INITIAL_STOCK_DATA } = require('./models/Stock');
-        await StockModel.initializeTable(INITIAL_STOCK_DATA); // 传入初始数据
+        const { INITIAL_STOCK_DATA } = require('./models/Stock'); // Keep this require for initial data
 
-        // Initialize other necessary tables
-        const { EntryListModel } = require('./models/EntryList');
-        const { StrategyModel } = require('./models/Strategy');
-        await EntryListModel.initializeTable();
+        await Promise.all([
+            UserModel.initializeTable(),
+            AuditLogModel.initializeTable(),
+            StockModel.initializeTable(INITIAL_STOCK_DATA), // Pass initial data
+            EntryListModel.initializeTable(),
+            ShipListModel.initializeTable(),
+            AiChatLogModel.initializeTable(),
+            AiChatSessionModel.initializeTable(),
+            InquiryTaskModel.initializeTable(),
+            CustomerModel.initializeTable(),
+            OutboundPlanModel.initializeTable(),
+            AiPromptModel.initializeTable(),
+            AiSchemaDocModel.initializeTable(),
+            AiChatEvaluationModel.initializeTable()
+        ]);
+
+        // Initialize other necessary tables that might have different initialization methods
         await StrategyModel.initializeTables();
-
-        // Initialize Inquiry Task Table
-        const { InquiryTaskModel } = require('./models/InquiryTask');
         await InquiryTaskModel.initializeTable();
 
         // Initialize Community Tables
