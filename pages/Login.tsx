@@ -140,7 +140,7 @@ const Login: React.FC = () => {
                                     <h2 className="text-2xl font-black text-slate-900 tracking-tight">欢迎回来</h2>
                                     <span className="text-[10px] bg-slate-900 text-white px-2 py-0.5 rounded-full font-bold">V{import.meta.env.VITE_APP_VERSION}</span>
                                 </div>
-                                <p className="text-sm text-slate-500 font-medium italic">殸木系统：让决策回归数据</p>
+                                <p className="text-sm text-slate-500 font-medium italic">殸木系统：AI自动编程</p>
                             </div>
 
                             {/* Login Method Toggle */}
