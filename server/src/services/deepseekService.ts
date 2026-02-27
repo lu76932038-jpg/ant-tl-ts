@@ -9,7 +9,7 @@ import { Logger } from '../utils/logger';
 /**
  * 将自然语言转换为针对 ant_order 表的查询 SQL (DeepSeek 版)
  */
-export const generateSqlForOrdersDeepSeek = async (prompt: string): Promise<{ sql: string, debug: { prompt: string, response: string } }> => {
+export const generateSqlForOrdersDeepSeek = async (prompt: string, history: { role: string, content: string }[] = []): Promise<{ sql: string, debug: { prompt: string, response: string } }> => {
     if (!config.ai.deepseekKey) {
         Logger.warn("缺少 DEEPSEEK_API_KEY, 请在 server/.env 中配置");
         throw new Error("服务端未配置 DeepSeek API Key");
@@ -29,32 +29,104 @@ export const generateSqlForOrdersDeepSeek = async (prompt: string): Promise<{ sq
     const openai = new OpenAI(options);
 
     const schemaInfo = `
-    表名: ant_order
-    字段:
-    - 订单日期 (Date)
-    - 订单号 (string, 主键)
-    - 产品型号 (string)
-    - 产品名 (string)
-    - 销售数量 (number)
-    - 销售单位 (string)
-    - 未税单价 (number)
-    - 未税小计 (number)
-    - 客户名 (string)
-    - 销售员 (string)
-    - 出库数量 (number)
-    - 合同交期 (Date)
+    你是一个精通 MySQL 的数据分析师。请根据以下数据库 Schema 编写 SQL。
+    
+    【重要规则】
+    1. **严禁使用** \`ant_order\` 表。所有订单相关数据必须从 \`shiplist\` (已出库/历史订单) 和 \`outbound_plan\` (未发货/计划订单) 中查询。
+    2. 查询“销售额”或“历史订单”时，请查询 \`shiplist\`。
+    3. 查询“未发货”、“待出库”或“计划”时，请查询 \`outbound_plan\`。
+    4. 查询“客户”信息时，请查询 \`CustomerList\`。
+
+    【表结构定义】
+
+    【表1：库存表 (StockList)】
+    - 用途：查询产品基础信息、当前库存状态。
+    - 字段：
+      - sku (string, 主键, 产品型号)
+      - name (string, 产品名称)
+      - status (string, 状态: '急需补货'|'库存预警'|'健康'|'呆滞')
+      - inStock (number, 实际在库数量)
+      - available (number, 可用库存数量)
+      - inTransit (number, 在途数量)
+      - warehouse (string, 仓库名称)
+      - product_type (string, 产品分类)
+
+    【表2：已出库清单 (shiplist)】
+    - 用途：查询**已完成**的销售记录、历史订单、销售额统计。
+    - 字段：
+      - outbound_id (string, 出库单号)
+      - product_model (string, 关联 StockList.sku)
+      - product_name (string, 产品名称)
+      - product_type (string, 产品分类)
+      - outbound_date (Date, 发货日期)
+      - quantity (number, 发货数量)
+      - unit_price (number, 单价)
+      - customer_name (string, 客户名称)
+      - customer_code (string, 关联 CustomerList.customer_code)
+      - warehouse (string, 发货仓库)
+
+    【表3：未发货清单 (outbound_plan)】
+    - 用途：查询**未完成**的订单、待发货计划。
+    - 字段：
+      - plan_code (string, 计划单号)
+      - sku (string, 关联 StockList.sku)
+      - product_name (string, 产品名称)
+      - quantity (number, 计划数量)
+      - customer_name (string, 客户名称)
+      - planned_date (Date, 计划发货日期)
+      - status (string, 状态: 'PENDING'|'COMPLETED'|'CANCELLED')
+      - warehouse (string, 指定仓库)
+
+    【表4：入库清单 (entry_list)】
+    - 用途：查询采购入库记录、在途物资。
+    - 字段：
+      - entry_id (string, 入库单号)
+      - sku (string, 关联 StockList.sku)
+      - product_name (string, 产品名称)
+      - quantity (number, 数量)
+      - unit_price (number, 采购单价)
+      - purchase_date (Date, 采购日期)
+      - arrival_date (Date, 预计/实际到货日期)
+      - supplier (string, 供应商名称)
+      - supplier_code (string, 关联 suppliers.supplier_code)
+      - status (string, 'PENDING'=待入库, 'RECEIVED'=已入库)
+      - warehouse (string, 目标仓库)
+
+    【表5：客户信息表 (CustomerList)】
+    - 用途：查询客户基础信息。
+    - 字段：
+      - customer_code (string, 客户代码)
+      - customer_name (string, 客户名称)
+
+    【表6：供应商表 (suppliers)】
+    - 用途：查询供应商基础信息。
+    - 字段：
+      - supplier_code (string, 供应商代码)
+      - name (string, 供应商名称)
+      - rating (number, 评级)
+      - status (string, 状态)
+
+    【关联关系】
+    - shiplist.product_model = StockList.sku
+    - outbound_plan.sku = StockList.sku
+    - entry_list.sku = StockList.sku
+    - shiplist.customer_code = CustomerList.customer_code
+    - entry_list.supplier_code = suppliers.supplier_code
     `;
 
     const today = new Date().toISOString().split('T')[0];
 
-    const systemInstruction = SQL_INSTRUCTION;
-
-    Logger.info(`[DeepSeek SQL] Prompt: ${prompt}, Today: ${today}`);
+    // 动态构建 System Prompt，将 Schema 注入
+    const contextSystemInstruction = `${SQL_INSTRUCTION}
+    
+    ${schemaInfo}
+    `;
 
     try {
         const messages = [
-            { role: "system", content: systemInstruction },
-            { role: "user", content: `将此需求转换为 SQL: ${prompt}` }
+            { role: "system", content: contextSystemInstruction },
+            ...history, // Inject history
+            { role: "user", content: `当前日期: ${today}\n需求: ${prompt}` }
         ];
 
         const completion = await openai.chat.completions.create({

@@ -2,35 +2,18 @@ import React, { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
-    FileSpreadsheet,
-    Users,
     LogOut,
     User,
-    LayoutGrid,
-    Menu,
-    X,
     ChevronRight,
-    ChevronDown,
-    Wrench,
-    Settings,
-    History,
-    KeyRound,
-    Fingerprint,
-    Train,
-    Package,
-    ClipboardList,
-    Truck,
-    ShoppingCart,
     PanelLeftClose,
-    PanelLeftOpen,
-    BookOpen,
-    Layers,
-    MessageSquarePlus,
-    Database
 } from 'lucide-react';
 import Logo from '../components/Logo';
+import { menuConfig, MenuItem } from '../config/menuConfig';
+import MultiTabs from '../components/MultiTabs';
+import { TabProvider } from '../context/TabContext';
+import KeepAliveOutlet from '../components/KeepAliveOutlet';
 
-const SidebarLayout: React.FC = () => {
+const SidebarLayoutContent: React.FC = () => {
     const { user, logout } = useAuth();
     const location = useLocation();
     const navigate = useNavigate();
@@ -51,86 +34,6 @@ const SidebarLayout: React.FC = () => {
         // Force full reload to verify session clear
         window.location.href = `${import.meta.env.BASE_URL}login`;
     };
-
-    interface MenuItem {
-        label: string;
-        path?: string;
-        icon: React.ReactNode;
-        roles?: string[];
-        permission?: string;
-        children?: MenuItem[];
-    }
-
-    const menuConfig: MenuItem[] = [
-        {
-            label: '殸木社区',
-            path: '/community',
-            icon: <Users className="w-5 h-5 text-violet-600" />,
-            roles: ['user', 'admin']
-        },
-        {
-            label: '殸木小工具',
-            icon: <Wrench className="w-5 h-5 text-gray-600" />,
-            children: [
-                {
-                    label: '询价管理',
-                    icon: <LayoutGrid className="w-4 h-4" />,
-                    children: [
-                        { label: '询价解析列表', path: '/inquiry-history', icon: <ClipboardList className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'inquiry_parsing' },
-                        { label: '操作指引', path: '/help', icon: <BookOpen className="w-4 h-4" /> }
-                    ]
-                },
-                { label: 'A&T 订单', path: '/at-orders', icon: <FileSpreadsheet className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'at_orders' },
-                {
-                    label: '备货助手',
-                    icon: <Package className="w-4 h-4" />,
-                    children: [
-                        { label: '备货清单', path: '/stock', icon: <ClipboardList className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
-                        { label: '采购计划', path: '/stock/purchase-plans', icon: <Layers className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
-                        { label: '采购订单', path: '/stock/purchase-orders', icon: <ShoppingCart className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
-                        { label: '入库清单', path: '/stock/entrylist', icon: <Package className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
-                        { label: '出库清单', path: '/stock/outbound', icon: <Truck className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'stock_list' },
-                        { label: '使用建议', path: '/feedback', icon: <MessageSquarePlus className="w-4 h-4" />, roles: ['user', 'admin'] },
-                        { label: '操作指引', path: '/stock/help', icon: <BookOpen className="w-4 h-4" /> },
-                    ]
-                },
-                {
-                    label: '客户管理',
-                    icon: <Users className="w-4 h-4" />,
-                    children: [
-                        { label: '客户列表', path: '/customer/list', icon: <ClipboardList className="w-4 h-4" />, roles: ['user', 'admin'] }
-                    ]
-                },
-                { label: '高铁发票助手', path: '/train-invoice', icon: <Train className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'train_invoice' }
-            ]
-        },
-        {
-            label: '个人中心',
-            icon: <Fingerprint className="w-5 h-5 text-emerald-500" />,
-            children: [
-                { label: '基本信息', path: '/profile', icon: <User className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'profile' },
-                { label: '修改密码', path: '/change-password', icon: <KeyRound className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'change_password' }
-            ]
-        },
-        {
-            label: '系统管理',
-            icon: <Settings className="w-5 h-5 text-slate-400" />,
-            children: [
-                { label: '用户管理', path: '/users', icon: <Users className="w-4 h-4" />, roles: ['admin'] },
-                {
-                    label: '数据同步',
-                    icon: <History className="w-4 h-4" />,
-                    roles: ['admin'],
-                    children: [
-                        { label: '出库数据同步', path: '/system/data-sync/outbound', icon: <Truck className="w-4 h-4" />, roles: ['admin'] },
-                        { label: '库存数据同步', path: '/system/data-sync/inventory', icon: <Database className="w-4 h-4" />, roles: ['admin'] },
-                        { label: '入库数据同步', path: '/system/data-sync/inbound', icon: <Database className="w-4 h-4" />, roles: ['admin'] }
-                    ]
-                },
-                { label: '登录日志', path: '/login-logs', icon: <History className="w-4 h-4" />, roles: ['admin'] }
-            ]
-        }
-    ];
 
     const canShowItem = (item: MenuItem) => {
         if (!user) return false;
@@ -365,11 +268,20 @@ const SidebarLayout: React.FC = () => {
 
             {/* Main Container */}
             <main className="flex-1 flex flex-col min-w-0 bg-[#f7f5f2] relative overflow-hidden">
+                <MultiTabs />
                 <div className="flex-1 relative flex flex-col min-h-0 overflow-y-auto custom-scrollbar">
-                    <Outlet />
+                    <KeepAliveOutlet />
                 </div>
             </main>
         </div>
+    );
+};
+
+const SidebarLayout: React.FC = () => {
+    return (
+        <TabProvider>
+            <SidebarLayoutContent />
+        </TabProvider>
     );
 };
 

@@ -8,11 +8,14 @@ import ForgotPassword from './pages/ForgotPassword';
 import Layout from './pages/Layout';
 import MainApp from './pages/MainApp';
 import UserManagement from './pages/UserManagement';
+import AuditLogs from './pages/AuditLogs';
+import ChatLogs from './pages/rag/ChatLogs';
+import RagTraining from './pages/rag/RagTraining';
 import LoginLogs from './pages/LoginLogs';
 import ProfileInfo from './pages/ProfileInfo';
 import ChangePassword from './pages/ChangePassword';
+import RagChat from './pages/rag/RagChat';
 import HelpDocs from './pages/HelpDocs';
-import AtOrders from './pages/AtOrders';
 import TrainTicketZip from './pages/TrainTicketZip';
 import StockList from './pages/stock/StockList';
 import ShipList from './pages/stock/ShipList';
@@ -28,11 +31,13 @@ import DashboardHome from './pages/DashboardHome';
 import InquiryList from './pages/inquiry/InquiryList';
 import InquiryDetail from './pages/inquiry/InquiryDetail';
 import StockHelpCenter from './pages/stock/StockHelpCenter';
-import FeedbackPage from './pages/feedback/FeedbackPage';
+
 import DataSync from './pages/system/DataSync';
 import InventoryDataSync from './pages/system/InventoryDataSync';
 import InboundDataSync from './pages/system/InboundDataSync';
+import OutboundPlanSync from './pages/system/OutboundPlanSync';
 import CustomerList from './pages/customer/CustomerList';
+import ReportManagement from './pages/report/ReportManagement';
 
 const App: React.FC = () => {
     return (
@@ -60,7 +65,6 @@ const App: React.FC = () => {
                         <Route path="profile" element={<ProfileInfo />} />
                         <Route path="change-password" element={<ChangePassword />} />
                         <Route path="help" element={<HelpDocs />} />
-                        <Route path="at-orders" element={<AtOrders />} />
                         <Route path="community" element={<Community />} />
                         <Route path="community/:id" element={<CommunityDetail />} />
 
@@ -85,7 +89,7 @@ const App: React.FC = () => {
                             <Route path="stock/help" element={<StockHelpCenter />} />
                         </Route>
 
-                        <Route path="feedback" element={<FeedbackPage />} />
+
 
                         <Route
                             path="train-invoice"
@@ -111,6 +115,36 @@ const App: React.FC = () => {
                                 </ProtectedRoute>
                             }
                         />
+                        <Route path="audit" element={
+                            <ProtectedRoute requiredPermission="admin">
+                                <AuditLogs />
+                            </ProtectedRoute>
+                        } />
+
+
+                        {/* RAG Routes */}
+                        <Route path="rag">
+                            <Route path="chat" element={
+                                <ProtectedRoute requiredPermission="at_orders">
+                                    <RagChat />
+                                </ProtectedRoute>
+                            } />
+                            <Route path="logs" element={
+                                <ProtectedRoute requiredPermission="admin">
+                                    <ChatLogs />
+                                </ProtectedRoute>
+                            } />
+                            <Route path="training" element={
+                                <ProtectedRoute requiredPermission="admin">
+                                    <RagTraining />
+                                </ProtectedRoute>
+                            } />
+                        </Route>
+                        <Route path="report-management" element={
+                            <ProtectedRoute requireAdmin>
+                                <ReportManagement />
+                            </ProtectedRoute>
+                        } />
                         <Route
                             path="system/data-sync/outbound"
                             element={
@@ -132,6 +166,14 @@ const App: React.FC = () => {
                             element={
                                 <ProtectedRoute requireAdmin>
                                     <InboundDataSync />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="system/data-sync/outbound-plan"
+                            element={
+                                <ProtectedRoute requireAdmin>
+                                    <OutboundPlanSync />
                                 </ProtectedRoute>
                             }
                         />

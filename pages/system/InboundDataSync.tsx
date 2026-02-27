@@ -19,7 +19,7 @@ const InboundDataSync: React.FC = () => {
         user: '',
         password: '',
         database: '',
-        sql: 'SELECT entry_id, product_model, product_name, quantity, arrival_date, supplier FROM view_inbound_detail WHERE arrival_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)',
+        sql: 'SELECT entry_id, product_model, product_name, quantity, unit_price, arrival_date, supplier, warehouse FROM view_inbound_detail WHERE arrival_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)',
         schedule: ['02:00']
     });
 
@@ -58,8 +58,8 @@ const InboundDataSync: React.FC = () => {
 
     const fetchStatus = async () => {
         try {
-            const res = await api.get('/datasync/status');
-            setIsSyncing(res.data.isInboundSyncing);
+            const res: any = await api.get('/datasync/status');
+            setIsSyncing(res?.isInboundSyncing ?? false);
         } catch (error) {
             console.error('Failed to fetch status', error);
         }
@@ -363,15 +363,19 @@ const InboundDataSync: React.FC = () => {
                             <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-xs text-amber-800">
                                 <div className="font-bold flex items-center gap-1 mb-1">
                                     <AlertTriangle size={14} />
-                                    SQL 必需列定义:
+                                    SQL 字段映射说明:
                                 </div>
                                 <div className="flex flex-wrap gap-2 mt-2">
-                                    <span className="bg-white border border-amber-200 px-2 py-0.5 rounded"><b>entry_id</b>: 原始入库单ID</span>
-                                    <span className="bg-white border border-amber-200 px-2 py-0.5 rounded"><b>product_model</b>: 产品型号</span>
-                                    <span className="bg-white border border-amber-200 px-2 py-0.5 rounded"><b>product_name</b>: 产品名称</span>
-                                    <span className="bg-white border border-amber-200 px-2 py-0.5 rounded"><b>quantity</b>: 入库数量</span>
-                                    <span className="bg-white border border-amber-200 px-2 py-0.5 rounded"><b>arrival_date</b>: 到货日期</span>
-                                    <span className="bg-white border border-amber-200 px-2 py-0.5 rounded"><b>supplier</b>: 供应商名称</span>
+                                    <span className="bg-white border border-amber-200 px-2 py-0.5 rounded" title="必填"><b>entry_id</b>: 原始入库单ID</span>
+                                    <span className="bg-white border border-amber-200 px-2 py-0.5 rounded" title="必填"><b>product_model</b>: 产品型号</span>
+                                    <span className="bg-white border border-amber-200 px-2 py-0.5 rounded" title="必填"><b>product_name</b>: 产品名称</span>
+                                    <span className="bg-white border border-amber-200 px-2 py-0.5 rounded" title="必填"><b>quantity</b>: 入库数量</span>
+                                    <span className="bg-white border border-amber-200 px-2 py-0.5 rounded" title="必填"><b>arrival_date</b>: 到货日期</span>
+                                    <span className="bg-white border border-amber-200 px-2 py-0.5 rounded" title="必填"><b>supplier</b>: 供应商名称</span>
+                                    <span className="bg-white border border-blue-200 text-blue-800 px-2 py-0.5 rounded" title="选填"><b>unit_price</b>: 单价/采购价 (选填)</span>
+                                    <span className="bg-white border border-blue-200 text-blue-800 px-2 py-0.5 rounded" title="选填"><b>supplier_code</b>: 供应商编码 (选填)</span>
+                                    <span className="bg-white border border-blue-200 text-blue-800 px-2 py-0.5 rounded" title="选填"><b>status</b>: 状态 (PENDING/RECEIVED)</span>
+                                    <span className="bg-white border border-blue-200 text-blue-800 px-2 py-0.5 rounded" title="选填"><b>warehouse</b>: 目标仓库 (选填)</span>
                                 </div>
                             </div>
                             <textarea

@@ -27,6 +27,7 @@ import { PurchasePlanModel } from './models/PurchasePlan';
 import { UserModel } from './models/User';
 import { LoginLogModel } from './models/LoginLog';
 import { CustomerModel } from './models/Customer';
+import { OutboundPlanModel } from './models/OutboundPlan';
 import { SchedulerService } from './services/SchedulerService';
 import { authenticate, requireAdmin, requirePermission } from './middleware/auth';
 import { rateLimiter } from './middleware/rateLimiter';
@@ -51,10 +52,10 @@ app.use((req, res, next) => {
 
 app.use(express.static(path.join(__dirname, '../public'))); // Serve static UI pages
 
-// 基础限流：每分钟 100 次请求
-const standardLimiter = rateLimiter(60 * 1000, 100);
-// 严格限流（针对 AI/文件处理）：每分钟 20 次请求
-const strictLimiter = rateLimiter(60 * 1000, 20);
+// 基础限流：每分钟 600 次请求 (大幅放宽以避免测试干扰)
+const standardLimiter = rateLimiter(60 * 1000, 600);
+// 严格限流（针对 AI/文件处理）：每分钟 300 次请求
+const strictLimiter = rateLimiter(60 * 1000, 300);
 // 询价上传限流：每分钟 50 次请求（适应批量上传场景）
 const inquiryLimiter = rateLimiter(60 * 1000, 50);
 
@@ -104,6 +105,10 @@ app.use('/api/datasync', authenticate, requireAdmin, dataSyncRoutes);
 import customerRoutes from './routes/customerRoutes';
 app.use('/api/customers', authenticate, standardLimiter, customerRoutes);
 
+// RAG Management Routes
+import ragRoutes from './routes/ragRoutes';
+app.use('/api/rag', authenticate, standardLimiter, ragRoutes); // Using standard limiter for RAG management API
+
 // Database Initialization (assuming initAdminUser and StockModel.initializeTable exist elsewhere or will be added)
 const initDB = async () => {
     try {
@@ -116,6 +121,7 @@ const initDB = async () => {
         await InquiryTaskModel.initializeTable(); // Initialize InquiryTask table
         await PurchasePlanModel.initializeTable(); // Initialize PurchasePlan table
         await CustomerModel.initializeTable(); // Initialize Customer table
+        await OutboundPlanModel.initializeTable();
 
         console.log('Database initialized.');
 

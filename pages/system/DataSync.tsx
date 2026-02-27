@@ -63,11 +63,11 @@ const DataSync: React.FC = () => {
 
     const fetchStatus = async () => {
         try {
-            const res = await api.get('/datasync/status');
+            const res: any = await api.get('/datasync/status');
             if (activeTab === 'outbound') {
-                setIsSyncing(res.data.isSyncing);
+                setIsSyncing(res?.isSyncing ?? false);
             } else {
-                setIsSyncing(res.data.isInboundSyncing);
+                setIsSyncing(res?.isInboundSyncing ?? false);
             }
         } catch (error) {
             console.error('Failed to fetch status', error);

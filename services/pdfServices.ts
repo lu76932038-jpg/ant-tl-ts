@@ -5,7 +5,11 @@ import { ExtractedTicket } from '../types';
 
 // PDF.js worker setup
 const PDFJS = (window as any).pdfjsLib;
-PDFJS.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+if (PDFJS) {
+    PDFJS.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+} else {
+    console.error('PDF.js library failed to load. PDF processing will be disabled.');
+}
 
 /**
  * Extracts all PDF files from an array of ZIP files.

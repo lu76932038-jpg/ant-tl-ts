@@ -48,6 +48,19 @@ export class DataSyncController {
         }
     };
 
+    // Save Outbound Plan configuration
+    saveOutboundPlanConfig = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const newConfig = req.body;
+            const currentConfig = await this.dataSyncService.getOutboundPlanConfig();
+            const mergedConfig = { ...currentConfig, ...newConfig };
+            await this.dataSyncService.saveOutboundPlanConfig(mergedConfig);
+            res.json({ message: '出库计划同步配置已保存' });
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    };
+
     // Get configuration
     getConfig = async (req: Request, res: Response): Promise<void> => {
         try {
@@ -74,6 +87,16 @@ export class DataSyncController {
     getInboundConfig = async (req: Request, res: Response): Promise<void> => {
         try {
             const config = await this.dataSyncService.getInboundConfig();
+            res.json(config);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    };
+
+    // Get Outbound Plan configuration
+    getOutboundPlanConfig = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const config = await this.dataSyncService.getOutboundPlanConfig();
             res.json(config);
         } catch (error: any) {
             res.status(500).json({ error: error.message });
@@ -114,7 +137,7 @@ export class DataSyncController {
     triggerSync = async (req: Request, res: Response): Promise<void> => {
         try {
             // Trigger sync in background to prevent HTTP timeout
-            this.dataSyncService.processSync().catch(err => {
+            this.dataSyncService.processOutboundSync().catch(err => {
                 console.error('Background sync failed:', err);
             });
 
@@ -159,10 +182,26 @@ export class DataSyncController {
         }
     };
 
+    // Trigger Outbound Plan Sync
+    triggerOutboundPlanSync = async (req: Request, res: Response): Promise<void> => {
+        try {
+            this.dataSyncService.processOutboundPlanSync().catch(err => {
+                console.error('Background outbound plan sync failed:', err);
+            });
+
+            res.json({
+                success: true,
+                message: 'Outbound plan sync started in background. Please check logs for progress.'
+            });
+        } catch (error) {
+            res.status(500).json({ success: false, message: (error as Error).message });
+        }
+    };
+
     // Get logs
     getLogs = async (req: Request, res: Response): Promise<void> => {
         try {
-            const type = (req.query.type as 'outbound' | 'inventory' | 'inbound') || 'outbound';
+            const type = (req.query.type as 'outbound' | 'inventory' | 'inbound' | 'outbound-plan') || 'outbound';
             const logs = await this.dataSyncService.getLogs(type);
             res.json(logs);
         } catch (error: any) {

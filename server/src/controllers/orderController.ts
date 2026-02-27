@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { AntOrderModel } from '../models/AntOrder';
-import { generateSqlForOrders } from '../services/geminiService';
+import { AiChatLogModel } from '../models/AiChatLog';
+import { generateSqlForOrdersDeepSeek, generateAnswerFromDataDeepSeek } from '../services/deepseekService';
+import { AiChatSessionModel } from '../models/AiChatSession';
 
 /**
  * 根据订单号查询订单详情
@@ -40,29 +42,34 @@ export const getSalesSummary = async (req: Request, res: Response) => {
  */
 export const chatWithOrders = async (req: Request, res: Response) => {
     try {
-        const { message, model } = req.body;
+        const { message, model, sessionId } = req.body;
         if (!message) {
             return res.status(400).json({ success: false, message: '缺少 message 参数' });
         }
 
-        // 1. 根据模型选择调用不同的服务生成 SQL
-        // 1. 根据模型选择调用不同的服务生成 SQL
+        // 0. 获取会话历史 (如果有 sessionId)
+        let historyMessages: any[] = [];
+        if (sessionId) {
+            const historyLogs = await AiChatLogModel.findBySessionId(sessionId);
+            // Limit to last 10 interactions to avoid token overflow
+            const recentLogs = historyLogs.slice(-5);
+            historyMessages = recentLogs.flatMap(log => [
+                { role: 'user', content: log.user_query },
+                { role: 'assistant', content: log.final_answer } // DeepSeek calls it 'assistant'
+            ]);
+
+            // Update session timestamp
+            await AiChatSessionModel.updateTimestamp(sessionId);
+        }
+
+        // 1. 强制使用 DeepSeek 服务生成 SQL (带历史上下文)
         let sql = "";
         let debugInfo = {};
 
-        if (model === 'deepseek') {
-            // 动态导入以避免循环依赖或未使用错误 (如果有)
-            const { generateSqlForOrdersDeepSeek } = await import('../services/deepseekService');
-            const result = await generateSqlForOrdersDeepSeek(message);
-            sql = result.sql;
-            debugInfo = result.debug;
-        } else {
-            // 默认使用 Gemini
-            const { generateSqlForOrders } = await import('../services/geminiService');
-            const result = await generateSqlForOrders(message);
-            sql = result.sql;
-            debugInfo = result.debug;
-        }
+        // Pass history to service
+        const result = await generateSqlForOrdersDeepSeek(message, historyMessages);
+        sql = result.sql;
+        debugInfo = result.debug;
 
         if (!sql) {
             return res.json({
@@ -78,37 +85,51 @@ export const chatWithOrders = async (req: Request, res: Response) => {
         }
 
         // 3. 执行 SQL 并返回结果
-        const result = await AntOrderModel.executeAiQuery(sql);
+        const queryResult = await AntOrderModel.executeAiQuery(sql);
 
-        // 4. (New) 再次调用 AI 根据数据生成回答
+        // 4. 调用 AI 根据数据生成回答
         let answer = "";
         try {
-            if (model === 'deepseek') {
-                const { generateAnswerFromDataDeepSeek } = await import('../services/deepseekService');
-                const resultCombined = await generateAnswerFromDataDeepSeek(message, result);
-                answer = resultCombined.answer;
-                // Merge debug info
-                if (resultCombined.debug) {
-                    (debugInfo as any).answerGen = resultCombined.debug;
-                }
-            } else {
-                const { generateAnswerFromData } = await import('../services/geminiService');
-                const resultCombined = await generateAnswerFromData(message, result);
-                answer = resultCombined.answer;
-                if (resultCombined.debug) {
-                    (debugInfo as any).answerGen = resultCombined.debug;
-                }
+            const resultCombined = await generateAnswerFromDataDeepSeek(message, queryResult);
+            answer = resultCombined.answer;
+            // Merge debug info
+            if (resultCombined.debug) {
+                (debugInfo as any).answerGen = resultCombined.debug;
             }
         } catch (aiError) {
             console.error("生成回答失败，仅返回数据:", aiError);
         }
 
+        // 5. 异步记录日志
+        let logId: number | undefined;
+        try {
+            // 构造 Prompt 摘要
+            const promptUsed = JSON.stringify(debugInfo, null, 2);
+
+            // 构造执行结果摘要 (仅记录行数或前几条，避免过大)
+            const resultSummary = `Row count: ${queryResult.length}. Sample: ${JSON.stringify(queryResult.slice(0, 3))}`;
+
+            logId = await AiChatLogModel.create({
+                session_id: sessionId || null,
+                user_query: message,
+                prompt_used: promptUsed,
+                sql_generated: sql,
+                sql_execution_result: resultSummary,
+                ai_reasoning: "",
+                final_answer: answer
+            });
+        } catch (logError) {
+            console.error("记录 AI 日志失败:", logError);
+            // 日志失败不影响主流程
+        }
+
         res.json({
             success: true,
-            data: result,
+            data: queryResult,
             sql: sql,
             debug: debugInfo,
-            message: answer // 将生成的回答放入 message 字段
+            message: answer, // 将生成的回答放入 message 字段
+            logId: logId
         });
     } catch (error) {
         console.error('AI 对话查询失败:', error);

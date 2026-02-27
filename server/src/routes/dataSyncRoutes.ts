@@ -38,6 +38,15 @@ router.post('/sync/inventory', controller.triggerInventorySync);
 // Manually trigger inbound sync
 router.post('/sync/inbound', controller.triggerInboundSync);
 
+// Save Outbound Plan config
+router.post('/config/outbound-plan', controller.saveOutboundPlanConfig);
+
+// Get Outbound Plan config
+router.get('/config/outbound-plan', controller.getOutboundPlanConfig);
+
+// Manually trigger Outbound Plan Sync
+router.post('/sync/outbound-plan', controller.triggerOutboundPlanSync);
+
 // Get sync logs
 router.get('/logs', controller.getLogs);
 
