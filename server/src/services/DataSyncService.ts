@@ -570,7 +570,7 @@ export class DataSyncService {
                     values.push(
                         row.plan_code,
                         row.product_model, // mapped to sku
-                        row.product_name,
+                        row.product_name ?? null,
                         row.quantity,
                         row.customer_name,
                         row.customer_code || '', // Added customer_code

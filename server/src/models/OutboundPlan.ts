@@ -5,7 +5,7 @@ export interface OutboundPlan {
     id: number;
     plan_code: string; // Unique plan number via sync
     sku: string;
-    product_name: string;
+    product_name?: string | null;
     quantity: number;
     customer_name: string;
     customer_code?: string;
@@ -27,7 +27,7 @@ export class OutboundPlanModel {
     static async create(item: Omit<OutboundPlan, 'id' | 'created_at' | 'updated_at'>): Promise<number> {
         const [result] = await pool.execute<ResultSetHeader>(
             'INSERT INTO outbound_plan (plan_code, sku, product_name, quantity, customer_name, customer_code, planned_date, warehouse, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [item.plan_code, item.sku, item.product_name, item.quantity, item.customer_name, item.customer_code || '', item.planned_date, item.warehouse || '', item.status]
+            [item.plan_code, item.sku, item.product_name ?? null, item.quantity, item.customer_name, item.customer_code || '', item.planned_date, item.warehouse || '', item.status]
         );
         return result.insertId;
     }
@@ -46,7 +46,7 @@ export class OutboundPlanModel {
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     plan_code VARCHAR(100) UNIQUE NOT NULL,
                     sku VARCHAR(100) NOT NULL,
-                    product_name VARCHAR(255) NOT NULL,
+                    product_name VARCHAR(255) NULL,
                     quantity INT NOT NULL DEFAULT 0,
                     customer_name VARCHAR(255) NOT NULL,
                     customer_code VARCHAR(100) NULL,
@@ -67,6 +67,15 @@ export class OutboundPlanModel {
             if (customerCodeCols.length === 0) {
                 await pool.execute("ALTER TABLE outbound_plan ADD COLUMN customer_code VARCHAR(100) NULL AFTER customer_name");
                 console.log('Added customer_code column to outbound_plan');
+            }
+
+            // Check product_name column nullability
+            const [productNameCols] = await pool.execute<RowDataPacket[]>(
+                "SHOW COLUMNS FROM outbound_plan LIKE 'product_name'"
+            );
+            if (productNameCols.length > 0 && productNameCols[0].Null === 'NO') {
+                await pool.execute("ALTER TABLE outbound_plan MODIFY COLUMN product_name VARCHAR(255) NULL");
+                console.log('Modified product_name column to allow NULL');
             }
 
             console.log('OutboundPlan table initialized.');

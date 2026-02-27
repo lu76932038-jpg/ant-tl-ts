@@ -50,7 +50,7 @@ const AtOrderChat: React.FC = () => {
     const fetchSessions = async () => {
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch('/api/rag/sessions', {
+            const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/rag/sessions`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await res.json();
@@ -65,7 +65,7 @@ const AtOrderChat: React.FC = () => {
     const createNewSession = async () => {
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch('/api/rag/sessions', {
+            const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/rag/sessions`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -101,7 +101,7 @@ const AtOrderChat: React.FC = () => {
         setCurrentSessionId(sessionId);
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`/api/rag/sessions/${sessionId}/messages`, {
+            const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/rag/sessions/${sessionId}/messages`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const result = await res.json();
@@ -157,7 +157,7 @@ const AtOrderChat: React.FC = () => {
 
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`/api/rag/sessions/${sessionId}`, {
+            const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/rag/sessions/${sessionId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -182,7 +182,7 @@ const AtOrderChat: React.FC = () => {
 
         try {
             const token = localStorage.getItem('token');
-            await fetch(`/api/rag/sessions/${sessionId}`, {
+            await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/rag/sessions/${sessionId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -246,7 +246,7 @@ const AtOrderChat: React.FC = () => {
             const token = localStorage.getItem('token');
             // Assuming we have a feedback endpoint. 
             // Phase 2 Plan says: POST /api/rag/logs/:id/feedback
-            await fetch(`/api/rag/logs/${msg.id}/feedback`, {
+            await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/rag/logs/${msg.id}/feedback`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -288,7 +288,7 @@ const AtOrderChat: React.FC = () => {
 
         const token = localStorage.getItem('token');
         try {
-            const response = await fetch('/api/orders/chat', {
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/orders/chat`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

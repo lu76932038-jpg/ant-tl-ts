@@ -1,8 +1,18 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Load .env from server root (parent of src)
-dotenv.config({ path: path.join(__dirname, '../../.env') });
+import fs from 'fs';
+
+// 优先从 Node 运行的工作目录 (process.cwd() 通常是 server 根目录) 寻找 .env
+let envPath = path.resolve(process.cwd(), '.env');
+
+// 如果当前目录没有找到，或者是在很深的子目录直接用 ts-node 运行，则回退到基于代码文件的相对层级寻找
+if (!fs.existsSync(envPath)) {
+    envPath = path.join(__dirname, '../../.env');
+}
+
+console.log(`[Env Loader] Attempting to load .env from: ${envPath}`);
+dotenv.config({ path: envPath });
 
 export const config = {
     server: {
