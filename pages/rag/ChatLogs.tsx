@@ -3,6 +3,7 @@ import { AiChatLog } from '../../types/AiChatLog';
 import { Calendar, Search, Activity, Code, Database, MessageSquare } from 'lucide-react';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+import { api } from '../../services/api';
 
 const ChatLogs: React.FC = () => {
     const [logs, setLogs] = useState<AiChatLog[]>([]);
@@ -15,11 +16,7 @@ const ChatLogs: React.FC = () => {
 
     const fetchChatLogs = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/rag/logs`, { // Updated URL
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const data = await res.json();
+            const data: any = await api.get('/rag/logs');
             if (data.success) {
                 setLogs(data.data);
             }

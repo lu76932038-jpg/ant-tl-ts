@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Settings, Save, Database, FileCode, Lightbulb, Check, X } from 'lucide-react';
+import { api } from '../../services/api';
 
 interface AiPrompt {
     id: number;
@@ -41,22 +42,15 @@ const RagTraining: React.FC = () => {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const token = localStorage.getItem('token');
-            const headers = { 'Authorization': `Bearer ${token}` };
+            const [promptsData, schemaData, suggestionsData] = await Promise.all([
+                api.get('/rag/prompts'),
+                api.get('/rag/schema'),
+                api.get('/rag/optimization/suggestions')
+            ]) as any[];
 
-            const [promptsRes, schemaRes, suggestionsRes] = await Promise.all([
-                fetch(`${import.meta.env.VITE_API_BASE_URL}/api/rag/prompts`, { headers }),
-                fetch(`${import.meta.env.VITE_API_BASE_URL}/api/rag/schema`, { headers }),
-                fetch(`${import.meta.env.VITE_API_BASE_URL}/api/rag/optimization/suggestions`, { headers })
-            ]);
-
-            const promptsData = await promptsRes.json();
-            const schemaData = await schemaRes.json();
-            const suggestionsData = await suggestionsRes.json();
-
-            if (promptsData.success) setPrompts(promptsData.data);
-            if (schemaData.success) setSchemaDocs(schemaData.data);
-            if (suggestionsData.success) setSuggestions(suggestionsData.data);
+            if (promptsData?.success) setPrompts(promptsData.data);
+            if (schemaData?.success) setSchemaDocs(schemaData.data);
+            if (suggestionsData?.success) setSuggestions(suggestionsData.data);
         } catch (error) {
             console.error(error);
         } finally {
@@ -67,16 +61,7 @@ const RagTraining: React.FC = () => {
     const handleSavePrompt = async () => {
         if (!editingPrompt) return;
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/rag/prompts`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(editingPrompt)
-            });
-            const data = await res.json();
+            const data: any = await api.post('/rag/prompts', editingPrompt);
             if (data.success) {
                 alert('Prompt Saved!');
                 fetchData();
@@ -90,16 +75,7 @@ const RagTraining: React.FC = () => {
     const handleSaveSchema = async () => {
         if (!editingSchema) return;
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/rag/schema`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(editingSchema)
-            });
-            const data = await res.json();
+            const data: any = await api.post('/rag/schema', editingSchema);
             if (data.success) {
                 alert('Schema Saved!');
                 fetchData();
