@@ -20,6 +20,8 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
         const userId = parseInt(req.params.id);
         const { username, email, password, role, permissions } = req.body; // Add permissions from body
 
+        console.log(`[DEBUG] updateUser: id=${userId}, hasPassword=${!!password}, role=${role}`);
+
         const updates: any = {};
         if (username) updates.username = username;
         if (email) updates.email = email;
@@ -78,6 +80,8 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?.id;
         const { oldPassword, newPassword } = req.body;
+
+        console.log(`[DEBUG] changePassword: userId=${userId}, hasOld=${!!oldPassword}, hasNew=${!!newPassword}`);
 
         if (!userId) {
             res.status(401).json({ error: '请先登录' });

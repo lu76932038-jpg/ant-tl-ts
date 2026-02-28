@@ -376,9 +376,18 @@ export class DataSyncService {
                 const sku = row.product_model;
                 if (!sku) continue;
 
-                const [exist] = await db.execute('SELECT id FROM StockList WHERE sku = ?', [sku]) as any[];
+                const [exist] = await db.execute('SELECT id, name FROM StockList WHERE sku = ?', [sku]) as any[];
                 if (exist.length > 0) {
-                    await db.execute('UPDATE StockList SET inStock = ?, available = ?, warehouse = ?, updated_at = NOW() WHERE id = ?', [Number(row.quantity || 0), Number(row.quantity || 0), row.warehouse || '', exist[0].id]);
+                    const oldName = exist[0].name;
+                    // 如果新数据有名字，则用新的；如果新数据没名字但旧数据有（且不是 Unknown），则保留旧的；否则设为 Unknown
+                    const finalName = (row.product_name && row.product_name.trim() !== '') 
+                        ? row.product_name 
+                        : ((oldName && oldName !== 'Unknown') ? oldName : 'Unknown');
+
+                    await db.execute(
+                        'UPDATE StockList SET name = ?, inStock = ?, available = ?, warehouse = ?, product_type = ?, updated_at = NOW() WHERE id = ?',
+                        [finalName, Number(row.quantity || 0), Number(row.quantity || 0), row.warehouse || '', row.product_type || null, exist[0].id]
+                    );
                     updated++;
                 } else {
                     await StockModel.create({

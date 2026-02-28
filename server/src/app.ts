@@ -91,7 +91,7 @@ app.use('/api/entry-list', authenticate, standardLimiter, requirePermission('sto
 
 // Community Routes - Authenticated
 import communityRoutes from './routes/communityRoutes';
-app.use('/api/community', authenticate, standardLimiter, communityRoutes);
+app.use('/api/community', authenticate, standardLimiter, requirePermission('admin'), communityRoutes);
 
 // Upload Routes
 import uploadRoutes from './routes/uploadRoutes';
@@ -99,15 +99,15 @@ app.use('/api/upload', authenticate, standardLimiter, uploadRoutes);
 
 // Data Sync Routes
 import dataSyncRoutes from './routes/dataSyncRoutes';
-app.use('/api/datasync', authenticate, requireAdmin, dataSyncRoutes);
+app.use('/api/datasync', authenticate, requireAdmin, requirePermission('data_sync'), dataSyncRoutes);
 
 // Customer Routes
 import customerRoutes from './routes/customerRoutes';
-app.use('/api/customers', authenticate, standardLimiter, customerRoutes);
+app.use('/api/customers', authenticate, standardLimiter, requirePermission('customer_management'), customerRoutes);
 
 // RAG Management Routes
 import ragRoutes from './routes/ragRoutes';
-app.use('/api/rag', authenticate, standardLimiter, ragRoutes); // Using standard limiter for RAG management API
+app.use('/api/rag', authenticate, standardLimiter, requirePermission('rag_logs'), ragRoutes); // Using standard limiter for RAG management API
 
 // Database Initialization (assuming initAdminUser and StockModel.initializeTable exist elsewhere or will be added)
 const initDB = async () => {
