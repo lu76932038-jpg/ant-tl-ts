@@ -3,7 +3,14 @@ import fs from 'fs';
 import path from 'path';
 
 // 常量配置
+const LOGIN_URL = 'http://101.132.103.175:7900/ant-tool/api/auth/login';
 const API_URL = 'http://101.132.103.175:7900/ant-tool/api/feedbacks';
+
+// 专用于获取反馈的自动登录账号信息（已在后端数据库中预置）
+const BOT_CREDENTIALS = {
+  username: 'admin',
+  password: 'admin123'
+};
 // 为了避免并发或频繁写入，保存一个游标状态文件
 const STATE_FILE = path.join(__dirname, '..', '..', '.agent', 'tmp', 'sync_feedbacks_state.json');
 const OUTPUT_FILE = path.join(__dirname, '..', '..', '.agent', 'tmp', 'new_feedbacks.json');
@@ -76,10 +83,23 @@ async function main() {
       params.last_fetch_time = lastFetchTime;
     }
 
-    // 这里调用外部商城提供的拉取反馈 API
-    // 提示：若接口实际路径或请求方式与预期不符，请在开发时调整这里
-    console.log(`📡 发起 API 请求: ${API_URL}`);
-    const response = await axios.get(API_URL, { params });
+    // 1. 先进行自动登录获取 Token
+    console.log(`📡 尝试登录获取 Token: ${LOGIN_URL}`);
+    const loginRes = await axios.post(LOGIN_URL, BOT_CREDENTIALS);
+    const token = loginRes.data.token;
+    if (!token) {
+      throw new Error('未从登录接口获取到有效的 Token');
+    }
+    console.log(`✅ 成功获取系统鉴权 Token`);
+
+    // 2. 携带 Token 去拉取社区反馈
+    console.log(`📡 发起 API 请求拉取数据: ${API_URL}`);
+    const response = await axios.get(API_URL, { 
+      params,
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
     
     // 假设响应格式是标准封装 { code: 200, data: [...] }，根据实际情况修改
     const responseData = response.data;

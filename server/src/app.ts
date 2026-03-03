@@ -95,6 +95,9 @@ import communityRoutes from './routes/communityRoutes';
 app.use('/api/community', authenticate, standardLimiter, requirePermission('admin'), communityRoutes);
 
 // Upload Routes
+import feedbackRoutes from './routes/feedbackRoutes';
+app.use('/api/feedbacks', authenticate, standardLimiter, feedbackRoutes);
+
 import uploadRoutes from './routes/uploadRoutes';
 app.use('/api/upload', authenticate, standardLimiter, uploadRoutes);
 
