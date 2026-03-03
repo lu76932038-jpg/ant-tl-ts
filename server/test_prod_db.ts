@@ -10,17 +10,9 @@ async function check() {
     });
 
     try {
-        const sql = `
-            SELECT 
-                r.*,
-                c.customer_name
-            FROM customer_credit_risk r
-            JOIN customerlist c ON r.customer_code = c.customer_code
-            ORDER BY r.updated_at DESC
-            LIMIT 5
-        `;
+        const sql = `SELECT * FROM customerlist ORDER BY created_at DESC LIMIT 5`;
         const [rows] = await pool.query(sql);
-        console.log("Success! Rows:");
+        console.log("Success! Active records in 'customerlist':", (rows as any[]).length);
         console.log(rows);
     } catch (error) {
         console.error("Query failed with error:");
