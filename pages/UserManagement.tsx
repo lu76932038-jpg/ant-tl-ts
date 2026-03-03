@@ -38,6 +38,7 @@ const UserManagement: React.FC = () => {
         { key: 'at_orders', label: 'A&T 订单' },
         { key: 'stock_list', label: '备货助手' },
         { key: 'train_invoice', label: '高铁发票助手' },
+        { key: 'credit_manage', label: '信用管理' },
         { key: 'profile', label: '个人中心(基本信息)' },
         { key: 'change_password', label: '个人中心(修改密码)' },
     ];
