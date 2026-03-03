@@ -19,7 +19,11 @@ import {
     Database,
     MessageSquare,
     BarChart3,
-    FileText
+    FileText,
+    ShieldCheck,
+    BrainCircuit,
+    RefreshCw,
+    Zap
 } from 'lucide-react';
 
 export interface MenuItem {
@@ -85,6 +89,15 @@ export const menuConfig: MenuItem[] = [
                 icon: <Users className="w-4 h-4" />,
                 children: [
                     { label: '客户列表', path: '/customer/list', icon: <ClipboardList className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'customer_management' }
+                ]
+            },
+            {
+                label: '信用管理',
+                icon: <ShieldCheck className="w-4 h-4" />,
+                children: [
+                    { label: '信用风控列表', path: '/credit/overview', icon: <LayoutGrid className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'credit_manage' },
+                    { label: '实时抓取实验室', path: '/credit/api-test', icon: <Zap className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'credit_manage' },
+                    { label: '信用数据同步', path: '/credit/sync', icon: <RefreshCw className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'credit_manage' },
                 ]
             },
             { label: '高铁发票助手', path: '/train-invoice', icon: <Train className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'train_invoice' }

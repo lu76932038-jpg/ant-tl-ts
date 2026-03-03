@@ -38,6 +38,11 @@ import InboundDataSync from './pages/system/InboundDataSync';
 import OutboundPlanSync from './pages/system/OutboundPlanSync';
 import CustomerList from './pages/customer/CustomerList';
 import ReportManagement from './pages/report/ReportManagement';
+import CreditOverview from './pages/credit/CreditOverview';
+import CreditDetail from './pages/credit/CreditDetail';
+import CreditAI from './pages/credit/CreditAI';
+import CreditSync from './pages/credit/CreditSync';
+import CreditApiTest from './pages/credit/CreditApiTest';
 
 const App: React.FC = () => {
     return (
@@ -66,8 +71,6 @@ const App: React.FC = () => {
                         <Route path="change-password" element={<ChangePassword />} />
                         <Route path="help" element={<HelpDocs />} />
                         <Route path="community" element={<Community />} />
-                        <Route path="community/:id" element={<CommunityDetail />} />
-
                         <Route path="community/:id" element={<CommunityDetail />} />
 
                         <Route path="customer/list" element={<CustomerList />} />
@@ -140,7 +143,19 @@ const App: React.FC = () => {
                                 </ProtectedRoute>
                             } />
                         </Route>
-                        <Route path="report-management" element={
+                        {/* 信用管理 (需要 credit_manage 权限) */}
+                        <Route path="credit" element={
+                            <ProtectedRoute requiredPermission="credit_manage">
+                                <Outlet />
+                            </ProtectedRoute>
+                        }>
+                            <Route path="overview" element={<CreditOverview />} />
+                            <Route path="detail/:id" element={<CreditDetail />} />
+                            <Route path="ai-analysis" element={<CreditAI />} />
+                            <Route path="sync" element={<CreditSync />} />
+                            <Route path="api-test" element={<CreditApiTest />} />
+                        </Route>
+                         <Route path="report-management" element={
                             <ProtectedRoute requireAdmin>
                                 <ReportManagement />
                             </ProtectedRoute>

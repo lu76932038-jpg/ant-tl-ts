@@ -31,8 +31,11 @@ const InquiryDetail: React.FC = () => {
 
     useEffect(() => {
         if (task?.process_logs) {
-            const firstAIIndex = task.process_logs.findIndex((l: any) => l.details?.aiPrompt);
-            if (firstAIIndex !== -1) setSelectedLogIdx(firstAIIndex);
+            // 自动选中第一个有详情的日志
+            const firstDetailIndex = task.process_logs.findIndex((l: any) =>
+                l.details && typeof l.details === 'object' && Object.keys(l.details).length > 0
+            );
+            if (firstDetailIndex !== -1) setSelectedLogIdx(firstDetailIndex);
         }
     }, [task]);
 
@@ -228,7 +231,7 @@ const InquiryDetail: React.FC = () => {
                                             const isSelected = selectedLogIdx === idx;
                                             const isSuccess = log.status === 'success';
                                             const isError = log.status === 'error';
-                                            const hasDetails = log.details && (log.details.aiPrompt || log.details.aiResponse);
+                                            const hasDetails = log.details && typeof log.details === 'object' && Object.keys(log.details).length > 0;
 
                                             return (
                                                 <div
@@ -241,12 +244,18 @@ const InquiryDetail: React.FC = () => {
                                                     `}
                                                 >
                                                     <div className="flex items-start justify-between mb-3">
-                                                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-tighter
-                                                            ${isSelected ? 'bg-white/20 text-white' :
-                                                                isSuccess ? 'bg-emerald-50 text-emerald-600' :
-                                                                    isError ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-                                                            {log.step}
-                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className={`flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-black border
+                                                                ${isSelected ? 'bg-white text-blue-600 border-white' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>
+                                                                {log.stepNumber || idx + 1}
+                                                            </div>
+                                                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-tighter
+                                                                ${isSelected ? 'bg-white/20 text-white' :
+                                                                    isSuccess ? 'bg-emerald-50 text-emerald-600' :
+                                                                        isError ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                                {log.step}
+                                                            </span>
+                                                        </div>
                                                         <span className={`text-[9px] font-mono ${isSelected ? 'text-blue-200' : 'text-slate-300'}`}>
                                                             {new Date(log.time).toLocaleTimeString([], { hour12: false })}
                                                         </span>
@@ -300,7 +309,7 @@ const InquiryDetail: React.FC = () => {
                                                     <div className="px-8 py-5 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
                                                         <div className="flex items-center gap-2">
                                                             <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                                            <span className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Prompt (模型输入)</span>
+                                                            <span className="text-[11px] font-black text-slate-800 uppercase tracking-widest">#{task.process_logs[selectedLogIdx].stepNumber || selectedLogIdx + 1} Prompt (模型输入)</span>
                                                         </div>
                                                         <div className="text-[9px] font-bold text-slate-400">INPUT TOKENS</div>
                                                     </div>
@@ -316,7 +325,7 @@ const InquiryDetail: React.FC = () => {
                                                     <div className="px-8 py-5 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
                                                         <div className="flex items-center gap-2">
                                                             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                                                            <span className="text-[11px] font-black text-emerald-400 uppercase tracking-widest">Model Response (模型输出)</span>
+                                                            <span className="text-[11px] font-black text-emerald-400 uppercase tracking-widest">#{task.process_logs[selectedLogIdx].stepNumber || selectedLogIdx + 1} Model Response (模型输出)</span>
                                                         </div>
                                                         <div className="text-[9px] font-bold text-emerald-400/50 tracking-widest font-mono">200 SUCCESS</div>
                                                     </div>
@@ -327,12 +336,35 @@ const InquiryDetail: React.FC = () => {
                                             )}
                                         </div>
 
-                                        {/* 内容快照 (如果是 AI 提取步骤) */}
+                                        {/* 通用属性展示 (对于非 AI 提取步骤或补充信息) */}
+                                        {(() => {
+                                            const details = task.process_logs[selectedLogIdx].details;
+                                            const otherDetails = { ...details };
+                                            delete otherDetails.aiPrompt;
+                                            delete otherDetails.aiResponse;
+                                            delete otherDetails.maskedContent;
+
+                                            if (Object.keys(otherDetails).length === 0) return null;
+
+                                            return (
+                                                <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100">
+                                                    <div className="flex items-center gap-2 mb-4">
+                                                        <LayoutGrid className="w-3 h-3 text-slate-500" />
+                                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">#{task.process_logs[selectedLogIdx].stepNumber || selectedLogIdx + 1} Step Metadata & Data (步骤执行明细)</span>
+                                                    </div>
+                                                    <div className="font-mono text-[11px] leading-relaxed text-slate-500 whitespace-pre-wrap bg-white/50 p-6 rounded-2xl border border-slate-100 max-h-[400px] overflow-auto custom-scrollbar">
+                                                        {JSON.stringify(otherDetails, null, 2)}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+
+                                        {/* 原始文本快照 (Masked Content) */}
                                         {task.process_logs[selectedLogIdx].details.maskedContent && (
                                             <div className="bg-amber-50/20 p-8 rounded-[2rem] border border-amber-100/30">
                                                 <div className="flex items-center gap-2 mb-4">
                                                     <Info className="w-3 h-3 text-amber-500" />
-                                                    <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Extracted Text Content (提取文本映射)</span>
+                                                    <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">#{task.process_logs[selectedLogIdx].stepNumber || selectedLogIdx + 1} Extracted Text Content (提取文本映射)</span>
                                                 </div>
                                                 <div className="font-mono text-[10px] leading-relaxed text-amber-900/40 whitespace-pre-wrap italic line-clamp-6 hover:line-clamp-none transition-all cursor-pointer">
                                                     {task.process_logs[selectedLogIdx].details.maskedContent}

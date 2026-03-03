@@ -208,7 +208,7 @@ const App: React.FC = () => {
       formData.append('file', file);
 
       // Call backend upload API
-      const response = await api.post('/inquiry/upload', formData, {
+      const response: any = await api.post('/inquiry/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 

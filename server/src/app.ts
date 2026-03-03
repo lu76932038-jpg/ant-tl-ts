@@ -27,6 +27,7 @@ import { PurchasePlanModel } from './models/PurchasePlan';
 import { UserModel } from './models/User';
 import { LoginLogModel } from './models/LoginLog';
 import { CustomerModel } from './models/Customer';
+import { CustomerCreditRiskModel } from './models/CustomerCreditRisk';
 import { OutboundPlanModel } from './models/OutboundPlan';
 import { SchedulerService } from './services/SchedulerService';
 import { authenticate, requireAdmin, requirePermission } from './middleware/auth';
@@ -109,6 +110,10 @@ app.use('/api/customers', authenticate, standardLimiter, requirePermission('cust
 import ragRoutes from './routes/ragRoutes';
 app.use('/api/rag', authenticate, standardLimiter, requirePermission('rag_logs'), ragRoutes); // Using standard limiter for RAG management API
 
+// Credit Risk Routes
+import customerCreditRiskRoutes from './routes/customerCreditRiskRoutes';
+app.use('/api/credit-risk', authenticate, standardLimiter, requirePermission('credit_manage'), customerCreditRiskRoutes);
+
 // Database Initialization (assuming initAdminUser and StockModel.initializeTable exist elsewhere or will be added)
 const initDB = async () => {
     try {
@@ -121,6 +126,7 @@ const initDB = async () => {
         await InquiryTaskModel.initializeTable(); // Initialize InquiryTask table
         await PurchasePlanModel.initializeTable(); // Initialize PurchasePlan table
         await CustomerModel.initializeTable(); // Initialize Customer table
+        await CustomerCreditRiskModel.initializeTable(); // Initialize Credit Risk table
         await OutboundPlanModel.initializeTable();
 
         console.log('Database initialized.');

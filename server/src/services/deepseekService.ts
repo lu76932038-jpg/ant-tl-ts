@@ -284,7 +284,7 @@ export const generateAnswerFromDataDeepSeek = async (originalPrompt: string, dat
 /**
  * 从文本中还原原始表格结构 (DeepSeek 版)
  */
-export const restoreRawTable = async (content: string): Promise<any[]> => {
+export const restoreRawTable = async (content: string): Promise<{ data: any[], debug: { prompt: string, response: string } }> => {
     if (!config.ai.deepseekKey) throw new Error("缺少 API Key");
 
     const options: any = {
@@ -315,11 +315,17 @@ export const restoreRawTable = async (content: string): Promise<any[]> => {
             data = Array.isArray(parsed) ? parsed : (parsed.items || [parsed]);
         } catch (e) {
             Logger.error("DeepSeek JSON Parse Error", e);
-            return [];
+            return { data: [], debug: { prompt: JSON.stringify(messages, null, 2), response: resultText } };
         }
 
         Logger.info(`[DeepSeek Restore] Table restored with ${data.length} rows`);
-        return data;
+        return {
+            data,
+            debug: {
+                prompt: JSON.stringify(messages, null, 2),
+                response: resultText
+            }
+        };
     } catch (error) {
         Logger.error("DeepSeek Restore Error:", error);
         throw error;

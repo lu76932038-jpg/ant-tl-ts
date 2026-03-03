@@ -46,6 +46,8 @@ const MultiTabs: React.FC = () => {
             if (pathname.startsWith('/inquiry/')) title = '询价详情';
             else if (pathname.startsWith('/stock/product/')) title = '产品详情';
             else if (pathname.startsWith('/community/')) title = '帖子详情';
+            else if (pathname.startsWith('/credit/detail/')) title = '信用详情';
+            else if (pathname.startsWith('/credit/ai')) title = '信用AI分析';
             else title = '未命名页面';
         }
 

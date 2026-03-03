@@ -14,16 +14,17 @@ export const parseInquiryFile = async (filePath: string, fileName: string, onPro
     const ext = path.extname(fileName).toLowerCase();
     const logs: any[] = [];
     const addLog = (step: string, message: string, status: 'success' | 'info' | 'error' | 'warning' = 'info', details?: any) => {
-        const log = { time: new Date().toISOString(), step, message, status, details };
+        const stepNumber = logs.length + 1;
+        const log = { time: new Date().toISOString(), step, stepNumber, message, status, details };
         logs.push(log);
-        console.log(`[Parser][${status.toUpperCase()}] ${step}: ${message}`);
+        console.log(`[Parser][${status.toUpperCase()}][Step ${stepNumber}] ${step}: ${message}`);
     };
 
     let extractedText = '';
     let extractedData: any = null;
 
     try {
-        addLog('文件读取', `开始处理文件: ${fileName}`, 'info');
+        addLog('文件读取', `开始处理文件: ${fileName}`, 'info', { fileName, filePath, userAgent: 'Anti-InquiryProcessor/2.0' });
 
         if (ext === '.xlsx' || ext === '.xls') {
             const workbook = xlsx.readFile(filePath);
@@ -32,12 +33,12 @@ export const parseInquiryFile = async (filePath: string, fileName: string, onPro
             const jsonData = xlsx.utils.sheet_to_json(sheet);
             extractedData = jsonData;
             extractedText = JSON.stringify(jsonData, null, 2);
-            addLog('文本提取', `Excel 已转换为 JSON 清单，共 ${jsonData.length} 行`, 'success');
+            addLog('文本提取', `Excel 已转换为 JSON 清单，共 ${jsonData.length} 行`, 'success', { rawData: jsonData, method: 'xlsx.utils.sheet_to_json' });
 
         } else if (ext === '.docx' || ext === '.doc') {
             const result = await mammoth.extractRawText({ path: filePath });
             extractedText = result.value;
-            addLog('文本提取', `Word 文本提取完成，长度: ${extractedText.length}`, 'success');
+            addLog('文本提取', `Word 文本提取完成，长度: ${extractedText.length}`, 'success', { textPreview: extractedText.slice(0, 1000) });
 
         } else if (['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif'].includes(ext)) {
             const fileData = fs.readFileSync(filePath);
@@ -46,7 +47,7 @@ export const parseInquiryFile = async (filePath: string, fileName: string, onPro
 
             addLog('OCR识别', `正在调起阿里云 OCR 服务...`, 'info');
             extractedText = await extractTextFromImageAliyun({ mimeType, data: base64Data });
-            addLog('OCR识别', `OCR 识别成功，字数: ${extractedText?.length || 0}`, 'success');
+            addLog('OCR识别', `OCR 识别成功，字数: ${extractedText?.length || 0}`, 'success', { textPreview: extractedText?.slice(0, 1000) });
 
         } else if (ext === '.pdf') {
             addLog('PDF解析', `正在提取 PDF 原生文本内容...`, 'info');
@@ -60,7 +61,7 @@ export const parseInquiryFile = async (filePath: string, fileName: string, onPro
                 addLog('PDF解析', `原生文本提取不足，可能为扫描件或受保护文档`, 'warning');
                 throw new Error('PDF 文本内容过少，暂不支持纯图片扫描件 PDF。');
             }
-            addLog('PDF解析', `PDF 文本提取成功`, 'success');
+            addLog('PDF解析', `PDF 文本提取成功`, 'success', { textPreview: extractedText.slice(0, 1000) });
 
         } else {
             throw new Error(`不支持的文件类型: ${ext}`);
@@ -74,8 +75,12 @@ export const parseInquiryFile = async (filePath: string, fileName: string, onPro
         if (ext !== '.xlsx' && ext !== '.xls') {
             addLog('结构还原', `正在分析文档结构并尝试还原原始清单详情...`, 'info');
             try {
-                extractedData = await restoreRawTable(extractedText);
-                addLog('结构还原', `原始清单已识别，共 ${extractedData.length} 行`, 'success');
+                const { data, debug } = await restoreRawTable(extractedText);
+                extractedData = data;
+                addLog('结构还原', `原始清单已识别，共 ${extractedData.length} 行`, 'success', {
+                    aiPrompt: debug.prompt,
+                    aiResponse: debug.response
+                });
             } catch (err) {
                 addLog('结构还原', `表格结构识别失败，降级为文本行展示`, 'warning');
                 extractedData = extractedText.split('\n')

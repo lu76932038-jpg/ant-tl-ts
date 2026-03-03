@@ -16,6 +16,8 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onAd
         inStock: 0,
         available: 0,
         inTransit: 0,
+        isStockingEnabled: true,
+        stockingRecommendation: true,
     });
 
     if (!isOpen) return null;
@@ -32,6 +34,8 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, onAd
             inStock: 0,
             available: 0,
             inTransit: 0,
+            isStockingEnabled: true,
+            stockingRecommendation: true,
         });
     };
 

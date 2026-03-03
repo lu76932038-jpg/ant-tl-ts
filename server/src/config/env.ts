@@ -50,5 +50,18 @@ export const config = {
         timeoutMs: parseInt(process.env.UPLOAD_TIMEOUT_MS_EXTENDED || '600000', 10),
         allowedTypes: (process.env.UPLOAD_ALLOWED_TYPES || 'xlsx,xls,doc,docx,pdf,jpg,jpeg,png').split(',')
     },
+    qichacha: {
+        appKey: process.env.QICHACHA_APP_KEY || '',
+        secretKey: process.env.QICHACHA_SECRET_KEY || '',
+        apiBase: process.env.QICHACHA_API_BASE || 'https://api.qichacha.com'
+    },
+    sub2api: {
+        key: process.env.SUB2API_KEY || '',
+        baseUrl: process.env.SUB2API_BASE || 'https://vpsairobot.com'
+    },
+    tianyancha: {
+        token: process.env.TIANYANCHA_TOKEN || '',
+        apiBase: process.env.TIANYANCHA_API_BASE || 'http://open.api.tianyancha.com/services/open/ic/baseinfo/normal'
+    },
     proxy: process.env.HTTPS_PROXY || process.env.http_proxy || ''
 };
