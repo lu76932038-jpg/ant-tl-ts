@@ -51,10 +51,12 @@ export const createFeedback = async (req: Request, res: Response) => {
 
 export const getFeedbacks = async (req: Request, res: Response) => {
     try {
-        const userId = (req as any).user?.id;
-        // Option: admins see all, users see their own? For now, let's just show user's own to keep it personal.
-        // Or if it's a "User Voice" board, maybe all? Let's stick to personal for now based on req.
-        const feedbacks = await FeedbackModel.findAll(userId);
+        const user = (req as any).user;
+        const userId = user?.id;
+        const isAdmin = user?.role === 'admin' || user?.permissions?.includes('all');
+
+        // 管理员能看到所有的反馈，普通用户只能看到自己的
+        const feedbacks = await FeedbackModel.findAll(isAdmin ? undefined : userId);
         res.json(feedbacks);
     } catch (error) {
         console.error('Get feedbacks error:', error);
