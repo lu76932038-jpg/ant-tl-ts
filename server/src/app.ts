@@ -12,7 +12,8 @@ import auditRoutes from './routes/auditRoutes';
 import orderRoutes from './routes/orderRoutes';
 import trainTicketRoutes from './routes/trainTicket';
 import stockRoutes from './routes/stockRoutes';
-import { ShipListModel } from './models/ShipList'; // Import ShipListModel
+import { ShipListModel } from './models/ShipList';
+import { FeedbackModel } from './models/Feedback'; // Import ShipListModel
 import shipListRoutes from './routes/shipListRoutes'; // Import ShipList routes
 import productRoutes from './routes/productRoutes'; // Import Product routes
 import { StrategyModel } from './models/Strategy';
@@ -124,6 +125,7 @@ const initDB = async () => {
 
         await UserModel.initializeTable();
         await LoginLogModel.initializeTable();
+        await FeedbackModel.initializeTables();
         await StrategyModel.initializeTables(); // Initialize Strategy tables
         await ShipListModel.initializeTable(); // Initialize ShipList table
         await InquiryTaskModel.initializeTable(); // Initialize InquiryTask table
