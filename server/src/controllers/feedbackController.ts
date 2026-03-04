@@ -58,8 +58,8 @@ export const getFeedbacks = async (req: Request, res: Response) => {
         // 管理员能看到所有的反馈，普通用户只能看到自己的
         const feedbacks = await FeedbackModel.findAll(isAdmin ? undefined : userId);
         res.json(feedbacks);
-    } catch (error) {
+    } catch (error: any) {
         console.error('Get feedbacks error:', error);
-        res.status(500).json({ error: 'Failed to fetch feedbacks' });
+        res.status(500).json({ error: 'Failed to fetch feedbacks', details: error?.message || String(error) });
     }
 };
