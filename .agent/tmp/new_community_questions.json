@@ -43,5 +43,20 @@
     "author_avatar": null,
     "answer_count": 0,
     "last_answer_at": null
+  },
+  {
+    "id": 4,
+    "title": "社区功能增加",
+    "content": "<p>社区问答里面&nbsp;是否可以增加&nbsp;点赞功能</p>",
+    "author_id": 1,
+    "tags": [],
+    "view_count": 1,
+    "vote_count": 0,
+    "created_at": "2026-03-04T08:16:44.000Z",
+    "updated_at": "2026-03-04T08:16:44.000Z",
+    "author_name": "admin",
+    "author_avatar": null,
+    "answer_count": 0,
+    "last_answer_at": null
   }
 ]

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { menuConfig, MenuItem } from '../config/menuConfig';
 
@@ -18,15 +18,39 @@ interface TabContextType {
     refreshTab: (path: string) => void;
 }
 
+const SESSION_KEY = 'ant_multitabs';
+
+/** 从 sessionStorage 读取持久化的页签列表，若无则返回默认首页页签 */
+function loadTabsFromSession(): TabItem[] {
+    try {
+        const raw = sessionStorage.getItem(SESSION_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw) as TabItem[];
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+    } catch {
+        // 解析失败时忽略，使用默认值
+    }
+    return [{ path: '/', title: '首页', closable: false }];
+}
+
 const TabContext = createContext<TabContextType | undefined>(undefined);
 
 export const TabProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const location = useLocation();
     const navigate = useNavigate();
-    const [tabs, setTabs] = useState<TabItem[]>([
-        { path: '/', title: '首页', closable: false }
-    ]);
+    // 初始化时从 sessionStorage 恢复历史页签
+    const [tabs, setTabs] = useState<TabItem[]>(loadTabsFromSession);
     const [refreshKeyMap, setRefreshKeyMap] = useState<Record<string, number>>({});
+
+    // 每当 tabs 变化时，同步写入 sessionStorage
+    useEffect(() => {
+        try {
+            sessionStorage.setItem(SESSION_KEY, JSON.stringify(tabs));
+        } catch {
+            // 存储失败时忽略（例如隐私模式容量限制）
+        }
+    }, [tabs]);
 
     // 扁平化菜单以便查找标题
     const flattenMenuMap = useCallback(() => {
@@ -49,25 +73,43 @@ export const TabProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     React.useEffect(() => {
         const { pathname } = location;
 
-        // 如果已存在，则无需操作
-        const exists = tabs.some(tab => tab.path === pathname);
-        if (exists) return;
-
-        // 查找标题
+        // 1. 预先计算当前路径的正确标题
         const titleMap = flattenMenuMap();
-        let title = titleMap.get(pathname);
+        let currentTitle = titleMap.get(pathname);
 
-        // 处理动态路由或未匹配路由 (简单处理)
-        if (!title) {
-            if (pathname.startsWith('/inquiry/')) title = '询价详情';
-            else if (pathname.startsWith('/stock/product/')) title = '产品详情';
-            else if (pathname.startsWith('/community/')) title = '帖子详情';
-            else if (pathname.startsWith('/credit/detail/')) title = '信用详情';
-            else if (pathname.startsWith('/credit/ai')) title = '信用AI分析';
-            else title = '未命名页面';
+        if (!currentTitle) {
+            // 采用更稳健的匹配方式，并尝试提取 SKU
+            const skuMatch = pathname.match(/\/(?:backtesting|ai-advice|product|command|inquiry|community|credit\/detail)\/([^/]+)/);
+            const sku = skuMatch ? skuMatch[1] : '';
+
+            if (pathname.includes('/stock/backtesting/')) currentTitle = `回测模拟${sku ? ` - ${sku}` : ''}`;
+            else if (pathname.includes('/stock/ai-advice/')) currentTitle = `备货AI建议${sku ? ` - ${sku}` : ''}`;
+            else if (pathname.includes('/stock/product/')) currentTitle = `产品备货配置${sku ? ` - ${sku}` : ''}`;
+            else if (pathname.includes('/stock/command/')) currentTitle = `备货指挥中心${sku ? ` - ${sku}` : ''}`;
+            else if (pathname.includes('/inquiry/')) currentTitle = `询价详情${sku ? ` - ${sku}` : ''}`;
+            else if (pathname.includes('/community/')) currentTitle = `帖子详情${sku ? ` - ${sku}` : ''}`;
+            else if (pathname.includes('/credit/detail/')) currentTitle = `信用详情${sku ? ` - ${sku}` : ''}`;
+            else if (pathname.includes('/credit/ai/')) currentTitle = '信用AI分析';
+            else currentTitle = '未命名页面';
         }
 
-        setTabs(prev => [...prev, { path: pathname, title: title!, closable: true }]);
+        // 2. 使用函数式更新确保操作的是最新的 tabs 数组
+        setTabs(prev => {
+            const index = prev.findIndex(t => t.path === pathname);
+
+            if (index !== -1) {
+                // 如果已存在但标题是“未命名”，且我们现在有了更好的标题，则更新它
+                if (prev[index].title === '未命名页面' && currentTitle !== '未命名页面') {
+                    const newTabs = [...prev];
+                    newTabs[index] = { ...newTabs[index], title: currentTitle! };
+                    return newTabs;
+                }
+                return prev;
+            }
+
+            // 3. 不存在则推入新 Tab
+            return [...prev, { path: pathname, title: currentTitle!, closable: true }];
+        });
     }, [location.pathname, flattenMenuMap]);
 
     const closeTab = useCallback((path: string) => {

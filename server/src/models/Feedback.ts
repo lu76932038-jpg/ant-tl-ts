@@ -54,4 +54,12 @@ export class FeedbackModel {
         const [rows] = await pool.execute<RowDataPacket[]>(sql, params);
         return rows as Feedback[];
     }
+
+    static async updateReply(id: number, aiReply: string): Promise<boolean> {
+        const [result] = await pool.execute<any>(
+            `UPDATE feedback_records SET ai_reply = ? WHERE id = ?`,
+            [aiReply, id]
+        );
+        return result.affectedRows > 0;
+    }
 }

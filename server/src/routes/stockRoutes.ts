@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import { StockController } from '../controllers/stockController';
+import { StockFavoriteController } from '../controllers/StockFavoriteController';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
 router.get('/', authenticate, StockController.getAllStocks);
 router.post('/', StockController.createStock);
+router.get('/favorites', authenticate, StockFavoriteController.getFavorites);
+router.post('/toggle-favorite', authenticate, StockFavoriteController.toggleFavorite);
 router.get('/:sku/stocking-stats', authenticate, StockController.getStockingStats);
 router.post('/initialize', StockController.initialize);
 router.get('/settings/stock-defaults', authenticate, StockController.getStockDefaults);
@@ -13,3 +16,4 @@ router.post('/settings/stock-defaults', authenticate, StockController.saveStockD
 router.patch('/:id', authenticate, StockController.updateStock);
 
 export default router;
+

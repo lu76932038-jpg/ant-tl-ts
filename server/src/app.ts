@@ -14,6 +14,8 @@ import trainTicketRoutes from './routes/trainTicket';
 import stockRoutes from './routes/stockRoutes';
 import { ShipListModel } from './models/ShipList';
 import { FeedbackModel } from './models/Feedback'; // Import ShipListModel
+import { AiTaskModel } from './models/AiTask';
+
 import shipListRoutes from './routes/shipListRoutes'; // Import ShipList routes
 import productRoutes from './routes/productRoutes'; // Import Product routes
 import { StrategyModel } from './models/Strategy';
@@ -118,6 +120,10 @@ app.use('/api/rag', authenticate, standardLimiter, requirePermission('rag_logs')
 import customerCreditRiskRoutes from './routes/customerCreditRiskRoutes';
 app.use('/api/credit-risk', authenticate, standardLimiter, requirePermission('credit_manage'), customerCreditRiskRoutes);
 
+// AI Task Routes
+import aiTaskRoutes from './routes/aiTaskRoutes';
+app.use('/api/ai-tasks', authenticate, standardLimiter, aiTaskRoutes);
+
 // Database Initialization (assuming initAdminUser and StockModel.initializeTable exist elsewhere or will be added)
 const initDB = async () => {
     try {
@@ -126,6 +132,7 @@ const initDB = async () => {
         await UserModel.initializeTable();
         await LoginLogModel.initializeTable();
         await FeedbackModel.initializeTables();
+        await AiTaskModel.initializeTables();
         await StrategyModel.initializeTables(); // Initialize Strategy tables
         await ShipListModel.initializeTable(); // Initialize ShipList table
         await InquiryTaskModel.initializeTable(); // Initialize InquiryTask table

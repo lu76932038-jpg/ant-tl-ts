@@ -1,86 +1,25 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { X, Home, MousePointer2, RotateCw } from 'lucide-react';
+import { X, Home, RotateCw } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { menuConfig, MenuItem } from '../config/menuConfig';
 import { useTabs } from '../context/TabContext';
-
-interface TabItem {
-    path: string;
-    title: string;
-    closable: boolean;
-}
 
 const MultiTabs: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const [tabs, setTabs] = useState<TabItem[]>([
-        { path: '/', title: '首页', closable: false }
-    ]);
+    // 直接从 TabContext 读取，刷新后可从 sessionStorage 恢复历史页签
+    const { tabs, closeTab, refreshTab } = useTabs();
 
-    // 扁平化菜单以便查找标题
-    const flattenMenuMap = useCallback(() => {
-        const map = new Map<string, string>();
-        const traverse = (items: MenuItem[]) => {
-            items.forEach(item => {
-                if (item.path) {
-                    map.set(item.path, item.label);
-                }
-                if (item.children) {
-                    traverse(item.children);
-                }
-            });
-        };
-        traverse(menuConfig);
-        return map;
-    }, []);
-
-    // 监听路由变化，添加新 Tab
-    useEffect(() => {
-        const { pathname } = location;
-        const menuMap = flattenMenuMap();
-        let title = menuMap.get(pathname);
-
-        if (!title) {
-            // 尝试处理子路径逻辑（针对详情页）
-            if (pathname.startsWith('/inquiry/')) title = '询价详情';
-            else if (pathname.startsWith('/stock/product/')) title = '产品详情';
-            else if (pathname.startsWith('/community/')) title = '帖子详情';
-            else if (pathname.startsWith('/credit/detail/')) title = '信用详情';
-            else if (pathname.startsWith('/credit/ai')) title = '信用AI分析';
-            else title = '未命名页面';
-        }
-
-        const tabTitle = title; // Create a const to ensure type safety in setter
-
-        setTabs(prev => {
-            if (prev.some(tab => tab.path === pathname)) return prev;
-            return [...prev, { path: pathname, title: tabTitle, closable: true }];
-        });
-    }, [location.pathname, flattenMenuMap]);
-
-    const handleClose = (e: React.MouseEvent, path: string) => {
+    const handleClose = useCallback((e: React.MouseEvent, path: string) => {
         e.stopPropagation();
-
-        // 1. 关闭 Tab
-        const newTabs = tabs.filter(t => t.path !== path);
-        setTabs(newTabs);
-
-        // 2. 如果关闭的是当前激活的 Tab，则跳转到临近的 Tab
-        if (path === location.pathname) {
-            const index = tabs.findIndex(t => t.path === path);
-            const nextTab = newTabs[index] || newTabs[index - 1];
-            if (nextTab) {
-                navigate(nextTab.path);
-            }
-        }
-    };
+        closeTab(path);
+    }, [closeTab]);
 
     const handleTabClick = (path: string) => {
         navigate(path);
     };
 
-    const { refreshTab } = useTabs();
+
 
     return (
         <div className="flex items-center gap-2 px-4 py-2 bg-[#f7f5f2] border-b border-slate-200/50">

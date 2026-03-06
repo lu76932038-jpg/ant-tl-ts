@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
     ChevronLeft, Package, AlertTriangle,
     Bell, Settings, History, CheckCircle,
@@ -31,6 +31,7 @@ import { Lock } from 'lucide-react';
 // --- Component ---
 const ProductDetail: React.FC = () => {
     const { user } = useAuth(); // Task 48: Auth Context
+    const navigate = useNavigate();
     // ... hooks logic unchanged
     const { sku } = useParams<{ sku: string }>();
     const [data, setData] = useState<ProductDetailData | null>(null);
@@ -979,6 +980,14 @@ const ProductDetail: React.FC = () => {
                                 <span className="hidden sm:inline">权限配置</span>
                             </button>
                         )}
+
+                        <button
+                            onClick={() => navigate(`/stock/backtesting/${data.basic.sku}`)}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-purple-50 border border-purple-100 rounded-lg text-sm font-bold text-purple-600 hover:bg-purple-100 transition-all shadow-sm active:scale-95 print:hidden"
+                        >
+                            <History size={16} />
+                            预测校验
+                        </button>
 
                         <button
                             onClick={() => window.print()}

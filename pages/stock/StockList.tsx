@@ -3,8 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { StockStatus, Product } from '../../types';
 import { MOCK_PRODUCTS } from './mockData';
-import { Download, Plus, Eye, ChevronLeft, ChevronRight, ChevronDown, Clock, Package, Zap, ShieldCheck, AlertTriangle } from 'lucide-react';
-import AddProductModal from '../../components/AddProductModal';
+import { Download, Eye, ChevronLeft, ChevronRight, ChevronDown, ShieldCheck, AlertTriangle, History, Sparkles, Heart } from 'lucide-react';
 import DownloadOptionsModal from '../../components/DownloadOptionsModal';
 import ShipProductModal from '../../components/ShipProductModal';
 import { api } from '../../services/api';
@@ -17,7 +16,6 @@ const StockList: React.FC = () => {
     const [activeFilter, setActiveFilter] = useState<StockStatus>(StockStatus.ALL);
     const [pageSize, setPageSize] = useState(15);
     const [currentPage, setCurrentPage] = useState(1);
-    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
     const [isShipModalOpen, setIsShipModalOpen] = useState(false);
     const [selectedProductForShip, setSelectedProductForShip] = useState<Product | null>(null);
@@ -27,21 +25,56 @@ const StockList: React.FC = () => {
     const [totalPages, setTotalPages] = useState(1);
     const [totalItems, setTotalItems] = useState(0);
 
+    const [favoritedSkus, setFavoritedSkus] = useState<Set<string>>(new Set());
+    // 是否只显示收藏
+    const [showFavoriteOnly, setShowFavoriteOnly] = useState(false);
+    // 全局各状态统计（服务端返回，跨页准确）
+    const [globalStats, setGlobalStats] = useState<Record<string, number>>({});
+
+    // 初始化时从后端拉取收藏
+    const fetchFavorites = async () => {
+        try {
+            const response: any = await api.get('/stocks/favorites');
+            setFavoritedSkus(new Set(response.favorites || []));
+        } catch (error) {
+            console.error('Failed to fetch favorites:', error);
+        }
+    };
+
     const fetchStocks = async () => {
         try {
             setIsLoading(true);
-            const params = new URLSearchParams({
-                page: currentPage.toString(),
-                pageSize: pageSize.toString(),
+
+            const queryParams: any = {
+                page: currentPage,
+                pageSize: pageSize,
                 status: activeFilter,
                 search: searchTerm
-            });
+            };
 
-            const response: any = await api.get(`/stocks?${params.toString()}`);
+            // 收藏跨页筛选
+            if (showFavoriteOnly) {
+                if (favoritedSkus.size > 0) {
+                    // 传递收藏的 SKU 给后端
+                    queryParams.favoriteSkus = Array.from(favoritedSkus).map(s => s.trim()).join(',');
+                } else {
+                    setProducts([]);
+                    setTotalItems(0);
+                    setTotalPages(0);
+                    setIsLoading(false);
+                    return;
+                }
+            }
+
+            // 使用 axios 的 params 传参，自动处理序列化
+            const response: any = await api.get('/stocks', { params: queryParams });
 
             setProducts(response.items || []);
             setTotalItems(response.total || 0);
             setTotalPages(response.totalPages || 1);
+            if (response.statusStats) {
+                setGlobalStats(response.statusStats);
+            }
 
         } catch (error) {
             console.error('Failed to fetch stocks:', error);
@@ -50,29 +83,29 @@ const StockList: React.FC = () => {
         }
     };
 
-    // removed client-side filteredProducts memo since we do it server-side now
 
-    // Trigger fetch when dependency changes
+    // 初始化加载
+    React.useEffect(() => {
+        fetchFavorites();
+    }, []);
+
+    // 依赖变化时触发重新获取
     React.useEffect(() => {
         fetchStocks();
-    }, [currentPage, pageSize, activeFilter]); // removed searchTerm to avoid debouncing issues for now, or add debounce
+    }, [currentPage, pageSize, activeFilter, showFavoriteOnly, favoritedSkus]);
 
-    // For Search, we might want a debounce or manual trigger
+    // 搜索 debounce
     React.useEffect(() => {
         const timer = setTimeout(() => {
-            setCurrentPage(1); // Reset to page 1 on search
+            setCurrentPage(1);
             fetchStocks();
         }, 500);
         return () => clearTimeout(timer);
     }, [searchTerm]);
 
-    // Manual Refresh
-    // const handleRefresh = fetchStocks;
-
     const handleUpdateInStock = async (product: Product, value: string) => {
         const newValue = parseInt(value, 10);
         if (isNaN(newValue) || newValue < 0) {
-            // alert('请输入有效的库存数量');
             setEditingId(null);
             return;
         }
@@ -83,23 +116,14 @@ const StockList: React.FC = () => {
         }
 
         try {
-            // Assuming PUT for update
             await api.put(`/stocks/${product.id}`, { inStock: newValue });
-
-            // Optimistic update
             setProducts(prev => prev.map(p =>
                 p.id === product.id ? { ...p, inStock: newValue } : p
             ));
             setEditingId(null);
         } catch (error) {
             console.error('Failed to update stock:', error);
-            // Revert changes if needed or just alert
         }
-    };
-
-    const handleAddProduct = () => {
-        fetchStocks();
-        setIsAddModalOpen(false);
     };
 
     const openShipModal = (product: Product) => {
@@ -119,15 +143,40 @@ const StockList: React.FC = () => {
         }
     };
 
+    // 切换收藏状态 (调用后端)
+    const handleToggleFavorite = async (sku: string) => {
+        const trimmedSku = sku.trim();
+        try {
+            const response: any = await api.post('/stocks/toggle-favorite', { sku: trimmedSku });
+            const { isFavorited } = response;
+
+            setFavoritedSkus(prev => {
+                const next = new Set(prev);
+                if (isFavorited) {
+                    next.add(trimmedSku);
+                } else {
+                    next.delete(trimmedSku);
+                }
+                return next;
+            });
+        } catch (error) {
+            console.error('Failed to toggle favorite:', error);
+        }
+    };
+
+
+
     const stats = useMemo(() => {
         return {
-            all: products.length,
-            critical: products.filter(p => p.status === StockStatus.CRITICAL).length,
-            warning: products.filter(p => p.status === StockStatus.WARNING).length,
-            healthy: products.filter(p => p.status === StockStatus.HEALTHY).length,
-            stagnant: products.filter(p => p.status === StockStatus.STAGNANT).length,
+            // 优先使用服务端全局统计，key 与数据库 status 字段（中文）对应
+            all: globalStats.total ?? totalItems,
+            critical: globalStats['急需补货'] ?? 0,
+            warning: globalStats['库存预警'] ?? 0,
+            healthy: globalStats['健康'] ?? 0,
+            stagnant: globalStats['呆滞'] ?? 0,
+            favorites: favoritedSkus.size,
         };
-    }, [products]);
+    }, [globalStats, favoritedSkus, totalItems]);
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-[#f5f5f7]">
@@ -191,22 +240,33 @@ const StockList: React.FC = () => {
                                     onClick={() => setActiveFilter(StockStatus.STAGNANT)}
                                     variant="stagnant"
                                 />
+                                <button
+                                    onClick={() => {
+                                        setShowFavoriteOnly(v => !v);
+                                        setCurrentPage(1);
+                                    }}
+                                    className={`whitespace-nowrap px-4 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 active:scale-95 border ${showFavoriteOnly
+                                        ? 'bg-rose-500 text-white border-rose-500 shadow-lg ring-4 ring-rose-500/15'
+                                        : 'bg-white text-gray-500 border-gray-100 hover:border-rose-300 hover:text-rose-500 hover:shadow-sm'
+                                        }`}
+                                    title="只看收藏"
+                                >
+
+                                    <Heart size={14} className={showFavoriteOnly ? 'fill-white' : ''} />
+                                    <span>收藏</span>
+                                    <span className={`px-2 py-0.5 rounded text-[12px] font-bold ${showFavoriteOnly ? 'bg-white/20' : 'bg-gray-100 text-gray-400'
+                                        }`}>{stats.favorites}</span>
+                                </button>
                             </div>
                         </div>
 
                         <div className="flex items-center gap-3">
                             <button
                                 onClick={() => setIsDownloadModalOpen(true)}
-                                className="flex items-center justify-center size-10 bg-white border border-gray-200 rounded-lg text-gray-400 shadow-sm hover:bg-gray-50 hover:text-black transition-all"
+                                className="flex items-center justify-center size-10 bg-white border border-gray-200 rounded-lg text-gray-500 shadow-sm hover:bg-gray-50 hover:text-black transition-all"
+                                title="导出清单"
                             >
-                                <Download size={20} />
-                            </button>
-                            <button
-                                onClick={() => setIsAddModalOpen(true)}
-                                className="flex items-center gap-2 px-5 py-2.5 bg-black text-white rounded-lg text-sm font-semibold shadow-md hover:bg-gray-800 transition-all"
-                            >
-                                <Plus size={18} />
-                                <span className="text-white">添加商品</span>
+                                <Download size={18} />
                             </button>
                         </div>
                     </div>
@@ -234,7 +294,7 @@ const StockList: React.FC = () => {
                                 <tbody className="divide-y divide-gray-50">
                                     {isLoading ? (
                                         <tr>
-                                            <td colSpan={7} className="py-20 text-center text-gray-400">
+                                            <td colSpan={12} className="py-20 text-center text-gray-400">
                                                 <div className="flex flex-col items-center gap-3">
                                                     <div className="size-6 border-2 border-gray-200 border-t-black rounded-full animate-spin"></div>
                                                     <p className="text-sm font-medium">同步云端数据中...</p>
@@ -243,7 +303,7 @@ const StockList: React.FC = () => {
                                         </tr>
                                     ) : products.length === 0 ? (
                                         <tr>
-                                            <td colSpan={7} className="py-20 text-center text-gray-400">
+                                            <td colSpan={12} className="py-20 text-center text-gray-400">
                                                 <p className="text-sm font-medium">暂无匹配的备货数据</p>
                                             </td>
                                         </tr>
@@ -252,22 +312,40 @@ const StockList: React.FC = () => {
                                             <tr key={product.id} className="hover:bg-gray-50/50 transition-colors">
                                                 <td className="py-3 px-6 text-center text-gray-500 whitespace-nowrap">
                                                     <div className="flex items-center justify-center gap-2">
-                                                        <button className="flex items-center justify-center size-9 rounded-lg border border-gray-200 bg-white shadow-sm hover:bg-gray-50 hover:border-gray-300 hover:text-black transition-all" title="查看详情">
+                                                        {/* 收藏按钮 */}
+                                                        <button
+                                                            onClick={() => handleToggleFavorite(product.sku)}
+                                                            className={`flex items-center justify-center size-9 rounded-lg border shadow-sm transition-all ${favoritedSkus.has(product.sku)
+                                                                ? 'border-rose-200 bg-rose-50 text-rose-500 hover:bg-rose-100 hover:border-rose-300'
+                                                                : 'border-gray-200 bg-white text-gray-300 hover:text-rose-400 hover:bg-rose-50 hover:border-rose-200'
+                                                                }`}
+                                                            title={favoritedSkus.has(product.sku) ? '取消收藏' : '收藏'}
+                                                        >
+                                                            <Heart size={16} className={favoritedSkus.has(product.sku) ? 'fill-rose-500' : ''} />
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => navigate(`/stock/product/${product.sku}`)}
+                                                            className="flex items-center justify-center size-9 rounded-lg border border-gray-200 bg-white shadow-sm hover:bg-gray-50 hover:border-gray-300 hover:text-black transition-all"
+                                                            title="查看详情"
+                                                        >
                                                             <Eye size={18} />
                                                         </button>
+
                                                         <button
-                                                            onClick={() => navigate(`/stock/command/${product.sku}`)}
-                                                            className="flex items-center justify-center size-9 rounded-lg border border-blue-100 bg-blue-50/50 text-blue-600 shadow-sm hover:bg-blue-100 hover:border-blue-300 transition-all"
-                                                            title="备货指挥中心"
+                                                            onClick={() => navigate(`/stock/backtesting/${product.sku}`)}
+                                                            className="flex items-center justify-center size-9 rounded-lg border border-purple-100 bg-purple-50/50 text-purple-600 shadow-sm hover:bg-purple-100 hover:border-purple-300 transition-all"
+                                                            title="预测模拟分析"
                                                         >
-                                                            <Zap size={18} />
+                                                            <History size={18} />
                                                         </button>
+
                                                         <button
-                                                            onClick={() => openShipModal(product)}
-                                                            className="flex items-center justify-center size-9 rounded-lg border border-gray-200 bg-white shadow-sm hover:bg-gray-50 hover:border-gray-300 hover:text-black transition-all"
-                                                            title="出库"
+                                                            onClick={() => navigate(`/stock/ai-advice/${product.sku}`)}
+                                                            className="flex items-center justify-center size-9 rounded-lg border border-indigo-100 bg-indigo-50/50 text-indigo-600 shadow-sm hover:bg-indigo-100 hover:border-indigo-300 transition-all"
+                                                            title="AI专家备货解读"
                                                         >
-                                                            <Package size={18} />
+                                                            <Sparkles size={18} />
                                                         </button>
                                                     </div>
                                                 </td>
@@ -399,11 +477,6 @@ const StockList: React.FC = () => {
                 </div>
             </main>
 
-            <AddProductModal
-                isOpen={isAddModalOpen}
-                onClose={() => setIsAddModalOpen(false)}
-                onAdd={handleAddProduct}
-            />
 
             <DownloadOptionsModal
                 isOpen={isDownloadModalOpen}

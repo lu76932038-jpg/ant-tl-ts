@@ -38,9 +38,12 @@ export interface MenuItem {
 export const menuConfig: MenuItem[] = [
     {
         label: '殸木社区',
-        path: '/community',
         icon: <Users className="w-5 h-5 text-violet-600" />,
-        roles: ['user', 'admin']
+        roles: ['user', 'admin'],
+        children: [
+            { label: '社区首页', path: '/community', icon: <Users className="w-4 h-4" />, roles: ['user', 'admin'] },
+            { label: 'AI 任务审批', path: '/system/ai-tasks', icon: <BrainCircuit className="w-4 h-4" />, roles: ['user', 'admin'] },
+        ]
     },
     {
         label: '殸木小工具',
@@ -51,6 +54,7 @@ export const menuConfig: MenuItem[] = [
                 icon: <LayoutGrid className="w-4 h-4" />,
                 children: [
                     { label: '询价解析列表', path: '/inquiry-history', icon: <ClipboardList className="w-4 h-4" />, roles: ['user', 'admin'], permission: 'inquiry_parsing' },
+                    { label: '询价报表', path: '/inquiry-report', icon: <BarChart3 className="w-4 h-4" /> },
                     { label: '操作指引', path: '/help', icon: <BookOpen className="w-4 h-4" />, permission: 'inquiry_help' }
                 ]
             },
@@ -115,6 +119,7 @@ export const menuConfig: MenuItem[] = [
         label: '系统管理',
         icon: <Settings className="w-5 h-5 text-slate-400" />,
         children: [
+
             { label: '用户管理', path: '/users', icon: <Users className="w-4 h-4" />, roles: ['admin'], permission: 'user_management' },
             {
                 label: '数据同步',

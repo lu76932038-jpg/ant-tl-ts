@@ -203,3 +203,38 @@ export class StockModel {
         }
     }
 }
+
+export class FavoriteModel {
+    static async getFavoritedSkus(userId: number): Promise<string[]> {
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            'SELECT sku FROM UserFavoriteStock WHERE user_id = ?',
+            [userId]
+        );
+        return rows.map(row => row.sku);
+    }
+
+    static async toggleFavorite(userId: number, sku: string): Promise<boolean> {
+        // 1. 检查是否存在
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            'SELECT id FROM UserFavoriteStock WHERE user_id = ? AND sku = ?',
+            [userId, sku]
+        );
+
+        if (rows.length > 0) {
+            // 2. 存在则删除
+            await pool.execute(
+                'DELETE FROM UserFavoriteStock WHERE user_id = ? AND sku = ?',
+                [userId, sku]
+            );
+            return false; // 返回最新状态：未收藏
+        } else {
+            // 3. 不存在则插入
+            await pool.execute(
+                'INSERT INTO UserFavoriteStock (user_id, sku) VALUES (?, ?)',
+                [userId, sku]
+            );
+            return true; // 返回最新状态：已收藏
+        }
+    }
+}
+

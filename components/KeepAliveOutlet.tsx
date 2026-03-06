@@ -38,7 +38,7 @@ const KeepAliveOutlet: React.FC = () => {
         <>
             {Array.from(componentCache.current.entries()).map(([path, component]) => {
                 const isActive = path === location.pathname;
-                const refreshKey = refreshKeyMap[path] || 0;
+                const refreshKey = (refreshKeyMap && refreshKeyMap[path]) || 0;
                 return (
                     <div
                         key={`${path}-${refreshKey}`}

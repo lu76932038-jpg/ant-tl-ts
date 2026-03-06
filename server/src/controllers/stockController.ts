@@ -11,8 +11,14 @@ export class StockController {
         try {
             const page = parseInt(req.query.page as string) || 1;
             const pageSize = parseInt(req.query.pageSize as string) || 15;
-            const status = req.query.status as string; // 'CRITICAL', 'WARNING', etc.
+            const status = req.query.status as string;
             const search = req.query.search as string;
+            // 收藏跨页筛选：前端传入逗号分隔的 SKU 列表
+            const favoriteSkusParam = req.query.favoriteSkus as string;
+
+            console.log('--- getAllStocks Request ---');
+            console.log('Query:', JSON.stringify(req.query));
+            console.log('favoriteSkusParam:', favoriteSkusParam);
 
             const offset = (page - 1) * pageSize;
 
@@ -27,18 +33,26 @@ export class StockController {
             }
 
             if (status && status !== '全部') {
-                // Map frontend '全部' to Check or just ignore
-                // StockStatus.ALL is '全部'
                 if (status !== StockStatus.ALL) {
-                    // Note: We persisted 'risk_status' (HEALTHY/WARNING/CRITICAL/STAGNANT)
-                    // Check if 'STAGNANT' is stored in 'risk_status' or if it relies on 'is_dead_stock'
-                    // In recalculateAll, we mapped riskLevel to StockStatus using mapRiskToStatus which handles STAGNANT.
-                    // So 'status' column in DB (which we updated) should hold the correct Enum string.
-                    // Wait, StockList table element 'status' was already there. We updated IT.
                     baseSql += ` AND status = ?`;
                     params.push(status);
                 }
             }
+
+            // 收藏筛选：使用 WHERE sku IN(...) 实现跨页
+            if (favoriteSkusParam) {
+                const skus = favoriteSkusParam
+                    .split(',')
+                    .map(s => s.trim())
+                    .filter(s => s.length > 0);
+                if (skus.length === 0) {
+                    return res.json({ items: [], total: 0, page, pageSize, totalPages: 0 });
+                }
+                const placeholders = skus.map(() => '?').join(',');
+                baseSql += ` AND sku IN (${placeholders})`;
+                params.push(...skus);
+            }
+
 
             // Count Total
             const [countRows] = await pool.query<RowDataPacket[]>(`SELECT COUNT(*) as total ${baseSql}`, params);
@@ -52,23 +66,44 @@ export class StockController {
                 LIMIT ? OFFSET ?
             `;
 
-            // Limit/Offset must be integers, not strings from params
             const [rows] = await pool.query<RowDataPacket[]>(sql, [...params, pageSize, offset]);
 
-            // Transform for Frontend (renaming columns if needed, but they match mostly)
             const result = rows.map(row => ({
                 ...row,
-                stockingRecommendation: !!row.is_stocking_recommended, // Convert 0/1 to boolean
+                stockingRecommendation: !!row.is_stocking_recommended,
                 isStockingEnabled: !!row.is_stocking_enabled,
                 isDeadStock: !!row.is_dead_stock
             }));
+
+            // 全局各状态统计（独立查询，用于筛选按钮显示总数）
+            let statsSql = `SELECT status, COUNT(*) as count FROM StockList WHERE 1=1`;
+            const statsParams: any[] = [];
+
+            if (favoriteSkusParam) {
+                const skus = favoriteSkusParam.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                if (skus.length > 0) {
+                    const placeholders = skus.map(() => '?').join(',');
+                    statsSql += ` AND sku IN (${placeholders})`;
+                    statsParams.push(...skus);
+                }
+            }
+            statsSql += ` GROUP BY status`;
+
+            const [statsRows] = await pool.query<RowDataPacket[]>(statsSql, statsParams);
+            const statusStats: Record<string, number> = { total: 0 };
+            statsRows.forEach((r: any) => {
+                statusStats[r.status] = Number(r.count);
+                statusStats.total = (statusStats.total || 0) + Number(r.count);
+            });
+
 
             res.json({
                 items: result,
                 total,
                 page,
                 pageSize,
-                totalPages: Math.ceil(total / pageSize)
+                totalPages: Math.ceil(total / pageSize),
+                statusStats
             });
 
         } catch (error) {

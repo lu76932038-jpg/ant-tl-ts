@@ -23,6 +23,7 @@ import EntryList from './pages/stock/EntryList';
 import PurchaseOrderList from './pages/stock/PurchaseOrderList';
 import PurchasePlanList from './pages/stock/PurchasePlanList';
 import ProductDetail from './pages/stock/ProductDetail';
+import ForecastBacktesting from './pages/stock/ForecastBacktesting';
 import StockDefaults from './pages/stock/StockDefaults';
 import Community from './pages/community/Community';
 import CommunityDetail from './pages/community/CommunityDetail';
@@ -31,11 +32,14 @@ import DashboardHome from './pages/DashboardHome';
 import InquiryList from './pages/inquiry/InquiryList';
 import InquiryDetail from './pages/inquiry/InquiryDetail';
 import StockHelpCenter from './pages/stock/StockHelpCenter';
+import StockAIAdvice from './pages/stock/StockAIAdvice';
+import InquiryReport from './pages/inquiry/InquiryReport';
 
 import DataSync from './pages/system/DataSync';
 import InventoryDataSync from './pages/system/InventoryDataSync';
 import InboundDataSync from './pages/system/InboundDataSync';
 import OutboundPlanSync from './pages/system/OutboundPlanSync';
+import AiTaskApproval from './pages/system/AiTaskApproval';
 import CustomerList from './pages/customer/CustomerList';
 import ReportManagement from './pages/report/ReportManagement';
 import CreditOverview from './pages/credit/CreditOverview';
@@ -66,6 +70,7 @@ const App: React.FC = () => {
                     >
                         <Route index element={<DashboardHome />} />
                         <Route path="inquiry-history" element={<InquiryList />} />
+                        <Route path="inquiry-report" element={<InquiryReport />} />
                         <Route path="inquiry/:id" element={<InquiryDetail />} />
                         <Route path="profile" element={<ProfileInfo />} />
                         <Route path="change-password" element={<ChangePassword />} />
@@ -89,7 +94,10 @@ const App: React.FC = () => {
                             <Route path="stock/purchase-plans" element={<PurchasePlanList />} />
                             <Route path="stock/purchase-orders" element={<PurchaseOrderList />} />
                             <Route path="stock/product/:sku" element={<ProductDetail />} />
+                            <Route path="stock/backtesting/:sku" element={<ForecastBacktesting />} />
+                            <Route path="stock/command/:sku" element={<StockCommandCenter />} />
                             <Route path="stock/help" element={<StockHelpCenter />} />
+                            <Route path="stock/ai-advice/:sku" element={<StockAIAdvice />} />
                         </Route>
 
 
@@ -155,7 +163,7 @@ const App: React.FC = () => {
                             <Route path="sync" element={<CreditSync />} />
                             <Route path="api-test" element={<CreditApiTest />} />
                         </Route>
-                         <Route path="report-management" element={
+                        <Route path="report-management" element={
                             <ProtectedRoute requireAdmin>
                                 <ReportManagement />
                             </ProtectedRoute>
@@ -189,6 +197,14 @@ const App: React.FC = () => {
                             element={
                                 <ProtectedRoute requireAdmin>
                                     <OutboundPlanSync />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="system/ai-tasks"
+                            element={
+                                <ProtectedRoute requireAdmin>
+                                    <AiTaskApproval />
                                 </ProtectedRoute>
                             }
                         />
